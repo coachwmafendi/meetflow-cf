@@ -45,12 +45,16 @@ and the generated `worker-configuration.d.ts` plus the plan documents are left a
 | `RATE_LIMITER` | Durable Object | Exact per-IP rate limiting |
 | `AVATARS`      | R2             | Host profile photos        |
 | `ASSETS`       | Workers Assets | CSS, fonts, Alpine         |
+| `EMAIL_QUEUE`  | Queues         | Transactional email        |
 
 ## Deploy
 
 ```bash
 npx wrangler d1 create meetflow-db          # once; copy the id into wrangler.jsonc
 npx wrangler r2 bucket create meetflow-avatars
+npx wrangler queues create meetflow-emails
+npx wrangler queues create meetflow-emails-dlq
+npx wrangler secret put RESEND_API_KEY       # optional; without it email is simply off
 npx wrangler secret put SESSION_SECRET      # a long random string
 npm run db:migrate:remote
 npm run deploy
@@ -73,6 +77,35 @@ timezone, light/dark/system theme.
 
 Guest: public profile, booking page with live slot availability, confirmation page. No account
 needed.
+
+## Email
+
+Transactional email goes through Resend, called over its REST API — no SDK, so the runtime
+dependency list stays at `hono` and `alpinejs`.
+
+| Trigger         | Recipient                                        |
+| --------------- | ------------------------------------------------ |
+| Booking created | Guest (confirmation) and host (new booking)      |
+| Host cancels    | Guest                                            |
+| 24 hours before | Guest (reminder, queued by an hourly cron sweep) |
+
+Sending is off the request path: routes enqueue a job and return immediately, so a slow or
+failing Resend never delays a booking. Jobs carry **only a booking id** — the consumer re-reads
+from D1 at send time, so a booking cancelled between enqueue and delivery is skipped rather
+than confirmed, and a retry can never deliver stale details.
+
+Failures are classified: 429 and 5xx are retried by the queue, 4xx is acked so one bad address
+cannot block a batch, and three failed attempts land in `meetflow-emails-dlq`.
+
+**Without `RESEND_API_KEY` the app works normally and simply sends nothing** — the send returns
+`skipped`, not an error.
+
+Two things must be set before real mail flows:
+
+1. `npx wrangler secret put RESEND_API_KEY`
+2. Verify a sending domain in Resend, then set `EMAIL_FROM` in `wrangler.jsonc` to an address
+   at that domain. The default (`onboarding@resend.dev`) only delivers to your own Resend
+   account address.
 
 ## Layout
 

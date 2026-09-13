@@ -26,5 +26,25 @@
   // Host avatars. Objects are served back through the Worker rather than a public
   // bucket URL, so we control the Content-Type and caching headers.
   "r2_buckets": [{ "binding": "AVATARS", "bucket_name": "meetflow-avatars" }],
+  // Email is sent off the request path: a booking must never fail or hang because
+  // Resend is slow. Queues gives durable retries and a dead-letter queue.
+  "queues": {
+    "producers": [{ "queue": "meetflow-emails", "binding": "EMAIL_QUEUE" }],
+    "consumers": [
+      {
+        "queue": "meetflow-emails",
+        "max_batch_size": 10,
+        "max_batch_timeout": 10,
+        "max_retries": 3,
+        "dead_letter_queue": "meetflow-emails-dlq"
+      }
+    ]
+  },
+  // Hourly sweep that queues 24-hour reminders.
+  "triggers": { "crons": ["17 * * * *"] },
+  "vars": {
+    "EMAIL_FROM": "MeetFlow <onboarding@resend.dev>",
+    "APP_URL": "https://meetflow.wmafendi.workers.dev"
+  },
   "observability": { "enabled": true }
 }

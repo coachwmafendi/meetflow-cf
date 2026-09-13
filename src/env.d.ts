@@ -9,5 +9,7 @@ declare namespace Cloudflare {
      * Buckets are the keys of LIMITS in src/middleware/rateLimit.ts.
      */
     RATE_LIMIT_OVERRIDES?: string;
+    /** Resend API key. Absent means email is switched off, not broken. */
+    RESEND_API_KEY?: string;
   }
 }

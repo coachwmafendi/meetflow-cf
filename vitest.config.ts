@@ -26,6 +26,7 @@ export default defineConfig({
         d1Databases: { DB: "meetflow-test" },
         durableObjects: { RATE_LIMITER: { className: "RateLimiter", useSQLite: true } },
         r2Buckets: { AVATARS: "meetflow-avatars-test" },
+        queueProducers: { EMAIL_QUEUE: "meetflow-emails-test" },
       },
     }),
   ],

@@ -99,12 +99,12 @@ No Cloudflare Pages project is required.
 - Workers Assets
 - Durable Objects (SQLite-backed; rate limits the public booking endpoint)
 - R2 (host avatars)
+- Queues (transactional email)
+- Cron Triggers (booking reminders)
 
 #### Add when needed
 
 - KV
-- Queues
-- Cron Triggers
 
 The MVP should not add Cloudflare services simply for the sake of using them.
 
@@ -813,19 +813,30 @@ Future use:
 
 ## 23. Email
 
-Email is optional for the first functional prototype.
-Architecture should allow email later.
+**Implemented** via Resend (REST, no SDK) with Cloudflare Queues for delivery and a Cron
+trigger for reminders.
 
-Future emails:
+| Trigger               | Recipient | Template     |
+| --------------------- | --------- | ------------ |
+| Booking created       | Guest     | Confirmation |
+| Booking created       | Host      | New booking  |
+| Host cancels          | Guest     | Cancellation |
+| 24 hours before start | Guest     | Reminder     |
 
-```text
-Booking confirmation
-Booking cancellation
-Booking reminder
-Reschedule notification
-```
+Reschedule notification remains out of scope, since guests cannot reschedule yet.
 
-Use Cloudflare Queues for background email jobs when implemented.
+Rules:
+
+- Sending happens off the request path. A booking must never fail or hang because the mail
+  provider is slow.
+- Queue messages carry only a booking id. The consumer re-reads from D1 at send time, so state
+  that changed after enqueue (a cancellation, a deletion) is respected.
+- Transient failures (429, 5xx, network) are retried by the queue; permanent ones (4xx) are
+  acked and logged so a single bad address cannot block a batch. Exhausted messages go to a
+  dead-letter queue.
+- Reminders are de-duplicated with `bookings.reminder_sent_at`, stamped in the same statement
+  that selects the due rows so overlapping cron runs cannot double-send.
+- With no `RESEND_API_KEY` configured the application behaves normally and sends nothing.
 
 ---
 

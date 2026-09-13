@@ -22,6 +22,7 @@ import { clearSession, issueSession } from "../middleware/auth";
 import { LIMITS, rateLimit } from "../middleware/rateLimit";
 import { AuthError, login, register } from "../services/auth";
 import { BookingError, cancelOwnedBooking } from "../services/booking";
+import { queueBookingCancelled } from "../services/email";
 import { loginPage, registerPage } from "../views/auth";
 import {
   availabilityPage,
@@ -278,7 +279,8 @@ dashboard.get("/bookings", async (c) => {
 
 dashboard.post("/bookings/:id/cancel", async (c) => {
   try {
-    await cancelOwnedBooking(c.env.DB, Number(c.req.param("id")), c.get("user").id);
+    const booking = await cancelOwnedBooking(c.env.DB, Number(c.req.param("id")), c.get("user").id);
+    c.executionCtx.waitUntil(queueBookingCancelled(c.env, booking.id));
   } catch (err) {
     if (!(err instanceof BookingError)) throw err;
   }

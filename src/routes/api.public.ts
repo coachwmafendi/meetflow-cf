@@ -5,6 +5,7 @@ import { isYmd } from "../lib/validate";
 import { LIMITS, rateLimit } from "../middleware/rateLimit";
 import { getSlotsForDate } from "../services/availability";
 import { BookingError, createBooking, resolvePublicTarget } from "../services/booking";
+import { queueBookingCreated } from "../services/email";
 import type { AppEnv } from "../types";
 
 export const publicRoutes = new Hono<AppEnv>();
@@ -73,6 +74,8 @@ publicRoutes.post("/:username/:eventSlug/book", rateLimit(LIMITS.book), async (c
       guestTimezone: String(body.timezone ?? "UTC"),
       notes: body.notes ? String(body.notes) : null,
     });
+    // Off the critical path: the guest gets their confirmation page regardless.
+    c.executionCtx.waitUntil(queueBookingCreated(c.env, booking.id));
     return c.json({ booking }, 201);
   } catch (err) {
     if (err instanceof BookingError) return c.json({ error: err.message }, err.status);

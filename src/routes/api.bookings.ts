@@ -3,6 +3,7 @@ import { dashboardStats, getBookingOwned, listBookings } from "../db/bookings";
 import { isoUtc, nowIso } from "../lib/time";
 import { zonedDateString, zonedToUtc } from "../lib/timezone";
 import { BookingError, cancelOwnedBooking } from "../services/booking";
+import { queueBookingCancelled } from "../services/email";
 import { requireAuth } from "../middleware/auth";
 import type { AppEnv } from "../types";
 
@@ -43,6 +44,7 @@ bookingRoutes.get("/:id", async (c) => {
 bookingRoutes.post("/:id/cancel", async (c) => {
   try {
     const booking = await cancelOwnedBooking(c.env.DB, Number(c.req.param("id")), c.get("user").id);
+    c.executionCtx.waitUntil(queueBookingCancelled(c.env, booking.id));
     return c.json({ booking });
   } catch (err) {
     if (err instanceof BookingError) return c.json({ error: err.message }, err.status);
