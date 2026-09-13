@@ -1,32 +1,314 @@
 @import "tailwindcss";
 @source "../**/*.ts";
 
+/* ---------------------------------------------------------------------------
+   Typefaces. Self-hosted variable fonts (52KB total) — no third-party request,
+   and they are served by the same Worker through the assets binding.
+   Geist Mono is not decoration: every time, date and duration in the product is
+   set in it with tabular figures, so columns of times align to the pixel.
+--------------------------------------------------------------------------- */
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/geist-latin-wght-normal.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/geist-mono-latin-wght-normal.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
-  --color-ink: oklch(0.21 0.02 264);
-  --color-muted: oklch(0.55 0.02 264);
-  --color-line: oklch(0.92 0.005 264);
-  --color-accent: oklch(0.55 0.19 264);
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Neutral ramp: cool, very low chroma so colour never competes with content. */
+  --color-canvas: oklch(0.985 0.002 265);
+  --color-surface: oklch(1 0 0);
+  --color-subtle: oklch(0.968 0.003 265);
+  --color-line: oklch(0.925 0.004 265);
+  --color-line-strong: oklch(0.87 0.006 265);
+  --color-muted: oklch(0.556 0.012 265);
+  --color-body: oklch(0.42 0.014 265);
+  --color-ink: oklch(0.205 0.015 265);
+
+  /* Primary is near-black rather than a brand hue — the calm, high-contrast
+     move that makes scheduling UI read as a tool instead of a landing page. */
+  --color-primary: oklch(0.205 0.015 265);
+  --color-primary-hover: oklch(0.3 0.015 265);
+
+  --color-accent: oklch(0.55 0.17 258);
+  --color-accent-soft: oklch(0.96 0.025 258);
+
+  --color-success: oklch(0.58 0.13 155);
+  --color-success-soft: oklch(0.96 0.03 155);
+  --color-danger: oklch(0.55 0.19 25);
+  --color-danger-soft: oklch(0.965 0.022 25);
+  --color-warning: oklch(0.68 0.13 75);
+  --color-warning-soft: oklch(0.97 0.035 75);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+
+  /* Borders carry the structure; shadows only lift things that truly float. */
+  --shadow-xs: 0 1px 2px 0 oklch(0.2 0.02 265 / 0.04);
+  --shadow-sm: 0 1px 3px 0 oklch(0.2 0.02 265 / 0.06), 0 1px 2px -1px oklch(0.2 0.02 265 / 0.04);
+  --shadow-md:
+    0 4px 12px -2px oklch(0.2 0.02 265 / 0.08), 0 2px 6px -2px oklch(0.2 0.02 265 / 0.05);
+  --shadow-lg:
+    0 12px 32px -8px oklch(0.2 0.02 265 / 0.12), 0 4px 12px -4px oklch(0.2 0.02 265 / 0.06);
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    /* 14px UI base: dense enough for a dashboard, still comfortable to read. */
+    font-size: 0.875rem;
+    line-height: 1.5715;
+    font-family: var(--font-sans);
+    background-color: var(--color-canvas);
+    color: var(--color-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3 {
+    color: var(--color-ink);
+    font-weight: 600;
+    letter-spacing: -0.017em;
+  }
+
+  /* Tabular figures everywhere numbers line up in a column. */
+  .font-mono,
+  input[type="time"],
+  input[type="date"],
+  input[type="number"] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  ::selection {
+    background: var(--color-ink);
+    color: white;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer components {
-  .mf-card {
-    @apply rounded-xl border border-line bg-white p-6 shadow-sm;
+  /* --- Surfaces --------------------------------------------------------- */
+  .ui-card {
+    @apply rounded-xl border border-line bg-surface shadow-xs;
   }
-  .mf-btn {
-    @apply inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2.5
-           text-sm font-medium text-white transition hover:opacity-90
-           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent
-           disabled:opacity-50;
+
+  .ui-card-pad {
+    @apply p-5 sm:p-6;
   }
-  .mf-btn-ghost {
-    @apply inline-flex items-center justify-center rounded-lg border border-line
-           px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-neutral-50;
+
+  .ui-divide > * + * {
+    @apply border-t border-line;
   }
-  .mf-input {
-    @apply w-full rounded-lg border border-line px-3 py-2.5 text-sm
-           focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent;
+
+  /* --- Buttons ---------------------------------------------------------- */
+  .ui-btn {
+    @apply inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap
+           rounded-md px-3.5 py-2 text-sm font-medium
+           transition-[background-color,border-color,color,box-shadow,transform] duration-150
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/45
+           focus-visible:ring-offset-2 focus-visible:ring-offset-canvas
+           disabled:pointer-events-none disabled:opacity-45;
   }
-  .mf-label {
-    @apply mb-1.5 block text-sm font-medium text-ink;
+
+  .ui-btn:active:not(:disabled) {
+    transform: translateY(0.5px);
+  }
+
+  .ui-btn-primary {
+    @apply bg-primary text-white hover:bg-primary-hover;
+  }
+
+  .ui-btn-secondary {
+    @apply border border-line-strong bg-surface text-ink shadow-xs
+           hover:border-line-strong hover:bg-subtle;
+  }
+
+  .ui-btn-ghost {
+    @apply text-body hover:bg-subtle hover:text-ink;
+  }
+
+  .ui-btn-danger {
+    @apply border border-line bg-surface text-danger hover:border-danger/30 hover:bg-danger-soft;
+  }
+
+  .ui-btn-sm {
+    @apply gap-1 rounded-sm px-2.5 py-1.5 text-[0.8125rem];
+  }
+
+  .ui-btn-lg {
+    @apply w-full rounded-lg px-4 py-2.5 text-sm;
+  }
+
+  /* --- Forms ------------------------------------------------------------ */
+  .ui-input,
+  .ui-select {
+    @apply block w-full rounded-md border border-line-strong bg-surface px-3 py-2
+           text-sm text-ink shadow-xs transition-[border-color,box-shadow] duration-150
+           placeholder:text-muted/70
+           focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/10
+           disabled:cursor-not-allowed disabled:bg-subtle disabled:text-muted;
+  }
+
+  .ui-select {
+    @apply appearance-none bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236b7280' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.7rem center;
+    background-size: 1rem;
+  }
+
+  .ui-label {
+    @apply mb-1.5 block text-[0.8125rem] font-medium text-ink;
+  }
+
+  .ui-hint {
+    @apply mt-1.5 text-[0.8125rem] text-muted;
+  }
+
+  .ui-fieldset {
+    @apply space-y-1;
+  }
+
+  /* --- Feedback --------------------------------------------------------- */
+  .ui-alert {
+    @apply flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-[0.8125rem];
+  }
+
+  .ui-alert-danger {
+    @apply border-danger/20 bg-danger-soft text-danger;
+  }
+
+  .ui-alert-success {
+    @apply border-success/20 bg-success-soft text-success;
+  }
+
+  .ui-badge {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5
+           text-[0.75rem] font-medium;
+  }
+
+  .ui-badge-neutral {
+    @apply border-line bg-subtle text-muted;
+  }
+
+  .ui-badge-success {
+    @apply border-success/20 bg-success-soft text-success;
+  }
+
+  .ui-badge-danger {
+    @apply border-danger/20 bg-danger-soft text-danger;
+  }
+
+  /* --- Data ------------------------------------------------------------- */
+  .ui-table {
+    @apply w-full border-collapse text-left text-sm;
+  }
+
+  .ui-table thead th {
+    @apply border-b border-line px-4 py-2.5 text-[0.75rem] font-medium uppercase
+           tracking-[0.04em] text-muted;
+  }
+
+  .ui-table tbody td {
+    @apply border-b border-line px-4 py-3.5 align-top text-body;
+  }
+
+  .ui-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .ui-table tbody tr {
+    @apply transition-colors duration-100 hover:bg-subtle/60;
+  }
+
+  /* --- Navigation ------------------------------------------------------- */
+  .ui-nav-link {
+    @apply relative whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted
+           transition-colors duration-150 hover:bg-subtle hover:text-ink;
+  }
+
+  .ui-nav-link-active {
+    @apply bg-subtle text-ink;
+  }
+
+  /* --- Typographic signature ------------------------------------------- */
+  /* Times and dates are the product. They get their own face. */
+  .ui-time {
+    @apply font-mono tracking-[-0.01em] tabular-nums;
+  }
+
+  .ui-eyebrow {
+    @apply text-[0.75rem] font-medium uppercase tracking-[0.08em] text-muted;
+  }
+
+  .ui-title {
+    @apply text-[1.375rem] font-semibold tracking-[-0.02em] text-ink sm:text-2xl;
+  }
+
+  .ui-subtitle {
+    @apply mt-1 text-sm text-muted;
+  }
+
+  /* --- Slot picker ------------------------------------------------------ */
+  .ui-slot {
+    @apply flex items-center justify-center rounded-md border border-line
+           bg-surface px-3 py-2.5 font-mono text-sm font-medium tabular-nums
+           tracking-[-0.01em] text-ink shadow-xs
+           transition-[border-color,background-color,transform] duration-150
+           hover:border-ink hover:bg-subtle
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/45
+           focus-visible:ring-offset-2;
+  }
+
+  .ui-slot:active {
+    transform: translateY(0.5px);
+  }
+}
+
+@layer utilities {
+  /* Staggered entrance for lists — one orchestrated moment on page load. */
+  @keyframes ui-rise {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .ui-rise {
+    animation: ui-rise 0.32s var(--ease-out-quart) both;
   }
 }

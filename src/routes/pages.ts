@@ -37,7 +37,7 @@ const notFound = () =>
   html(
     `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Not found · MeetFlow</title>
      <link rel="stylesheet" href="/app.css"></head>
-     <body class="bg-neutral-50 text-ink"><main class="mx-auto max-w-md px-6 py-20 text-center">
+     <body class="bg-canvas text-body"><main class="mx-auto max-w-md px-6 py-20 text-center">
      <h1 class="text-2xl font-semibold tracking-tight">Not found</h1>
      <p class="mt-2 text-sm text-muted">That page does not exist.</p>
      </main></body></html>`,

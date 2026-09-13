@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "npm run css && wrangler dev",
-    "css": "tailwindcss -i ./src/styles/app.css -o ./public/app.css",
+    "css": "npm run fonts && tailwindcss -i ./src/styles/app.css -o ./public/app.css",
     "css:watch": "tailwindcss -i ./src/styles/app.css -o ./public/app.css --watch",
     "build": "npm run css",
     "test": "vitest run",
@@ -16,7 +16,8 @@
     "check": "npm run format:check && npm run typecheck && npm test",
     "db:migrate:local": "wrangler d1 migrations apply meetflow-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply meetflow-db --remote",
-    "deploy": "npm run css && wrangler deploy"
+    "deploy": "npm run css && wrangler deploy",
+    "fonts": "mkdir -p public/fonts && cp node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2 node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2 public/fonts/"
   },
   "dependencies": {
     "alpinejs": "^3.17.2",
@@ -24,6 +25,8 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
     "@tailwindcss/cli": "^4.3.3",
     "@types/node": "^26.5.1",
     "prettier": "^3.9.6",

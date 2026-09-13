@@ -28,7 +28,7 @@ export interface TimezoneSelectOptions {
 export function timezoneSelect({ name, selected, autodetect }: TimezoneSelectOptions): string {
   const id = escapeHtml(name);
   return `
-    <select class="mf-input" id="${id}" name="${id}" data-timezone${
+    <select class="ui-select" id="${id}" name="${id}" data-timezone${
       autodetect ? " data-timezone-autodetect" : ""
     } required>
       <option value="${escapeHtml(selected)}" selected>${escapeHtml(zoneLabel(selected))}</option>

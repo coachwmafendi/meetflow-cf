@@ -1,40 +1,51 @@
 import { escapeHtml, layout } from "./layout";
+import { TIMEZONE_SCRIPT, timezoneSelect } from "./timezoneSelect";
+import { badge, button, emptyState, field, icon, pageHeader, statTile, table, time } from "./ui";
 import type { BookingWithEvent, DashboardStats } from "../db/bookings";
 import type { AvailabilityRuleRow, EventTypeRow, PublicUser } from "../types";
 import { utcToZonedParts } from "../lib/timezone";
-import { TIMEZONE_SCRIPT, timezoneSelect } from "./timezoneSelect";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function fmt(iso: string, timeZone: string): string {
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** "Mon 14 Sep · 09:00" — weekday first, because hosts scan by day. */
+function whenParts(iso: string, timeZone: string): { day: string; clock: string } {
   const p = utcToZonedParts(new Date(iso), timeZone);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${p.year}-${pad(p.month)}-${pad(p.day)} ${pad(p.hour)}:${pad(p.minute)}`;
+  const weekday = DAY_NAMES[new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay()]!.slice(
+    0,
+    3,
+  );
+  return {
+    day: `${weekday} ${pad(p.day)} ${MONTHS[p.month - 1]}`,
+    clock: `${pad(p.hour)}:${pad(p.minute)}`,
+  };
 }
 
-function statCard(label: string, value: string | number): string {
-  return `<div class="mf-card">
-    <p class="text-sm text-muted">${label}</p>
-    <p class="mt-1 text-3xl font-semibold tracking-tight">${value}</p>
-  </div>`;
+function whenCell(iso: string, timeZone: string): string {
+  const { day, clock } = whenParts(iso, timeZone);
+  return `<div class="whitespace-nowrap">
+      ${time(clock, "text-ink font-medium")}
+      <span class="ui-time ml-2 text-[0.8125rem] text-muted">${escapeHtml(day)}</span>
+    </div>`;
 }
+
+/* -------------------------------------------------------------------------- */
 
 export function dashboardPage(
   user: PublicUser,
   stats: DashboardStats,
   recent: BookingWithEvent[],
 ): string {
-  const rows = recent.length
-    ? recent
-        .map(
-          (b) => `<tr class="border-t border-line">
-            <td class="py-3 pr-4">${escapeHtml(b.guest_name)}</td>
-            <td class="py-3 pr-4 text-muted">${escapeHtml(b.event_name)}</td>
-            <td class="py-3 text-right tabular-nums">${fmt(b.start_at, user.timezone)}</td>
-          </tr>`,
-        )
-        .join("")
-    : `<tr><td colspan="3" class="py-6 text-center text-sm text-muted">No bookings yet.</td></tr>`;
+  const rows = recent.map((b) => [
+    `<div class="font-medium text-ink">${escapeHtml(b.guest_name)}</div>
+     <div class="text-[0.8125rem] text-muted">${escapeHtml(b.guest_email)}</div>`,
+    `<span class="text-body">${escapeHtml(b.event_name)}</span>`,
+    whenCell(b.start_at, user.timezone),
+  ]);
+
+  const firstName = user.name.split(" ")[0] ?? user.name;
 
   return layout({
     title: "Dashboard",
@@ -42,40 +53,91 @@ export function dashboardPage(
     activeNav: "/dashboard",
     hostName: user.name,
     body: `
-      <h1 class="mb-6 text-2xl font-semibold tracking-tight">Good day, ${escapeHtml(user.name)}</h1>
-      <div class="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        ${statCard("Upcoming", stats.upcoming)}
-        ${statCard("Today", stats.today)}
-        ${statCard("Total bookings", stats.total)}
-        ${statCard("Active event types", stats.activeEventTypes)}
+      ${pageHeader({
+        eyebrow: "Overview",
+        title: `Good day, ${firstName}`,
+        subtitle: `Your booking page is live at /${user.slug}`,
+        actionsHtml: button({
+          label: "View public page",
+          href: `/${user.slug}`,
+          icon: "globe",
+          size: "sm",
+        }),
+      })}
+
+      <div class="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        ${statTile("Upcoming", stats.upcoming, "calendar")}
+        ${statTile("Today", stats.today, "clock")}
+        ${statTile("Total bookings", stats.total, "inbox")}
+        ${statTile("Active event types", stats.activeEventTypes, "layers")}
       </div>
-      <div class="mf-card">
-        <h2 class="mb-4 text-lg font-medium">Recent bookings</h2>
-        <table class="w-full text-sm"><tbody>${rows}</tbody></table>
-      </div>`,
+
+      <section class="ui-card overflow-hidden">
+        <div class="flex items-center justify-between border-b border-line px-5 py-3.5">
+          <h2 class="text-sm font-semibold text-ink">Upcoming bookings</h2>
+          ${button({ label: "All bookings", href: "/dashboard/bookings", variant: "ghost", size: "sm", iconAfter: "chevronRight" })}
+        </div>
+        ${table({
+          columns: [{ label: "Guest" }, { label: "Event type" }, { label: "When" }],
+          rowsHtml: rows,
+          emptyHtml: emptyState({
+            icon: "calendar",
+            title: "No upcoming bookings",
+            body: "Once someone books a slot on your public page it will show up here.",
+            actionHtml: button({
+              label: "Open public page",
+              href: `/${user.slug}`,
+              variant: "secondary",
+              size: "sm",
+              icon: "globe",
+            }),
+          }),
+        })}
+      </section>`,
   });
 }
 
+/* -------------------------------------------------------------------------- */
+
 export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[]): string {
-  const cards = eventTypes.length
-    ? eventTypes
-        .map((e) => {
-          const path = `/${escapeHtml(user.slug)}/${escapeHtml(e.slug)}`;
-          return `<div class="mf-card flex items-start justify-between gap-4">
-            <div>
-              <p class="font-medium">${escapeHtml(e.name)}</p>
-              <p class="text-sm text-muted">${e.duration_minutes} min${
-                e.is_active ? "" : " · inactive"
-              }</p>
-              <p class="mt-2 text-sm"><code class="rounded bg-neutral-100 px-1.5 py-0.5">${path}</code></p>
-            </div>
-            <div class="flex shrink-0 gap-2">
-              <a class="mf-btn-ghost" href="${path}">Open</a>
-            </div>
-          </div>`;
-        })
-        .join("")
-    : `<div class="mf-card text-sm text-muted">No event types yet. Create your first one below.</div>`;
+  const cards = eventTypes
+    .map((e, i) => {
+      const path = `/${user.slug}/${e.slug}`;
+      return `<article class="ui-card ui-rise group flex items-center justify-between gap-4 p-4 sm:p-5
+                     transition-shadow duration-200 hover:shadow-md"
+               style="animation-delay:${Math.min(i, 8) * 32}ms">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <h3 class="truncate text-sm font-semibold text-ink">${escapeHtml(e.name)}</h3>
+            ${e.is_active ? "" : badge("neutral", "Inactive", false)}
+          </div>
+          <p class="mt-1 flex items-center gap-1.5 text-[0.8125rem] text-muted">
+            ${icon("clock", "size-3.5")}
+            <span class="ui-time">${e.duration_minutes} min</span>
+          </p>
+          ${
+            e.description
+              ? `<p class="mt-2 line-clamp-2 max-w-prose text-[0.8125rem] text-muted">${escapeHtml(
+                  e.description,
+                )}</p>`
+              : ""
+          }
+          <p class="mt-2.5 truncate font-mono text-[0.75rem] text-muted">${escapeHtml(path)}</p>
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          ${button({ label: "Preview", href: path, variant: "secondary", size: "sm", icon: "link" })}
+        </div>
+      </article>`;
+    })
+    .join("");
+
+  const list = eventTypes.length
+    ? `<div class="mb-8 grid gap-3">${cards}</div>`
+    : `<div class="ui-card mb-8">${emptyState({
+        icon: "layers",
+        title: "No event types yet",
+        body: "An event type is a meeting people can book — a name, a length, and a URL.",
+      })}</div>`;
 
   return layout({
     title: "Event Types",
@@ -83,35 +145,70 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[]): st
     activeNav: "/dashboard/event-types",
     hostName: user.name,
     body: `
-      <h1 class="mb-6 text-2xl font-semibold tracking-tight">Event types</h1>
-      <div class="mb-8 grid gap-4">${cards}</div>
-      <form class="mf-card grid gap-4 sm:grid-cols-2" method="post" action="/dashboard/event-types">
-        <div><label class="mf-label" for="name">Name</label>
-          <input class="mf-input" id="name" name="name" required></div>
-        <div><label class="mf-label" for="slug">URL slug</label>
-          <input class="mf-input" id="slug" name="slug" required></div>
-        <div><label class="mf-label" for="duration_minutes">Duration (minutes)</label>
-          <input class="mf-input" id="duration_minutes" name="duration_minutes" type="number"
-                 min="5" max="480" value="30" required></div>
-        <div><label class="mf-label" for="description">Description</label>
-          <input class="mf-input" id="description" name="description"></div>
-        <div class="sm:col-span-2"><button class="mf-btn" type="submit">Create event type</button></div>
-      </form>`,
+      ${pageHeader({
+        eyebrow: "Bookable meetings",
+        title: "Event types",
+        subtitle: "Each one gets its own public booking link.",
+      })}
+
+      ${list}
+
+      <section class="ui-card ui-card-pad">
+        <h2 class="mb-4 text-sm font-semibold text-ink">Create an event type</h2>
+        <form class="grid gap-4 sm:grid-cols-2" method="post" action="/dashboard/event-types">
+          ${field({ name: "name", label: "Name", placeholder: "Consultation" })}
+          ${field({
+            name: "slug",
+            label: "URL slug",
+            placeholder: "consultation",
+            hint: `Public link: /${user.slug}/…`,
+          })}
+          ${field({
+            name: "duration_minutes",
+            label: "Duration",
+            type: "number",
+            value: "30",
+            hint: "Minutes. Slots are generated on this interval.",
+            attrsHtml: 'min="5" max="480" step="5"',
+          })}
+          ${field({
+            name: "description",
+            label: "Description",
+            required: false,
+            placeholder: "A 30-minute intro call",
+          })}
+          <div class="sm:col-span-2">
+            ${button({ label: "Create event type", variant: "primary", icon: "plus" })}
+          </div>
+        </form>
+      </section>`,
   });
 }
+
+/* -------------------------------------------------------------------------- */
 
 export function availabilityPage(user: PublicUser, rules: AvailabilityRuleRow[]): string {
   const rows = DAY_NAMES.map((day, index) => {
     const dayRules = rules.filter((r) => r.day_of_week === index);
-    const row = (start: string, end: string) => `<div class="flex items-center gap-2">
-          <input class="mf-input w-32" type="time" name="start_${index}" value="${start}">
-          <span class="text-muted">–</span>
-          <input class="mf-input w-32" type="time" name="end_${index}" value="${end}">
-        </div>`;
-    // Existing windows, plus exactly one blank row so another can be added without JS.
-    const inputs = dayRules.map((r) => row(r.start_time, r.end_time)).join("") + row("", "");
-    return `<div class="flex flex-col gap-2 border-t border-line py-4 sm:flex-row sm:items-start">
-      <p class="w-32 shrink-0 pt-2.5 text-sm font-medium">${day}</p>
+    const active = dayRules.length > 0;
+
+    const slotRow = (start: string, end: string) => `
+      <div class="flex items-center gap-2">
+        <input class="ui-input w-[9.5rem] font-mono" type="time" name="start_${index}"
+               value="${start}" aria-label="${day} start time">
+        <span class="text-muted" aria-hidden="true">–</span>
+        <input class="ui-input w-[9.5rem] font-mono" type="time" name="end_${index}"
+               value="${end}" aria-label="${day} end time">
+      </div>`;
+
+    const inputs =
+      dayRules.map((r) => slotRow(r.start_time, r.end_time)).join("") + slotRow("", "");
+
+    return `<div class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:gap-6">
+      <div class="flex w-32 shrink-0 items-center gap-2 pt-2">
+        <span class="size-1.5 rounded-full ${active ? "bg-success" : "bg-line-strong"}"></span>
+        <span class="text-sm font-medium ${active ? "text-ink" : "text-muted"}">${day}</span>
+      </div>
       <div class="flex flex-wrap gap-3">${inputs}</div>
     </div>`;
   }).join("");
@@ -122,16 +219,22 @@ export function availabilityPage(user: PublicUser, rules: AvailabilityRuleRow[])
     activeNav: "/dashboard/availability",
     hostName: user.name,
     body: `
-      <h1 class="mb-2 text-2xl font-semibold tracking-tight">Weekly availability</h1>
-      <p class="mb-6 text-sm text-muted">Times are in ${escapeHtml(
-        user.timezone,
-      )}. Leave a day blank to be unavailable.</p>
-      <form class="mf-card" method="post" action="/dashboard/availability">
-        ${rows}
-        <div class="pt-4"><button class="mf-btn" type="submit">Save availability</button></div>
+      ${pageHeader({
+        eyebrow: "Weekly schedule",
+        title: "Availability",
+        subtitle: `Times are in ${user.timezone}. Leave a day blank to be unavailable.`,
+      })}
+
+      <form method="post" action="/dashboard/availability">
+        <div class="ui-card ui-divide overflow-hidden">${rows}</div>
+        <div class="mt-4 flex justify-end">
+          ${button({ label: "Save availability", variant: "primary", icon: "check" })}
+        </div>
       </form>`,
   });
 }
+
+/* -------------------------------------------------------------------------- */
 
 export function bookingsPage(
   user: PublicUser,
@@ -139,34 +242,42 @@ export function bookingsPage(
   scope: string,
 ): string {
   const tab = (value: string, label: string) =>
-    `<a href="/dashboard/bookings?scope=${value}" class="rounded-lg px-3 py-2 text-sm ${
-      scope === value ? "bg-neutral-100 font-medium" : "text-muted hover:bg-neutral-50"
-    }">${label}</a>`;
+    `<a href="/dashboard/bookings?scope=${value}" class="ui-nav-link ${
+      scope === value ? "ui-nav-link-active" : ""
+    }"${scope === value ? ' aria-current="page"' : ""}>${label}</a>`;
 
-  const rows = bookings.length
-    ? bookings
-        .map(
-          (b) => `<tr class="border-t border-line align-top">
-            <td class="py-3 pr-4">
-              <p class="font-medium">${escapeHtml(b.guest_name)}</p>
-              <p class="text-sm text-muted">${escapeHtml(b.guest_email)}</p>
-              ${b.notes ? `<p class="mt-1 text-sm text-muted">${escapeHtml(b.notes)}</p>` : ""}
-            </td>
-            <td class="py-3 pr-4 text-sm">${escapeHtml(b.event_name)}</td>
-            <td class="py-3 pr-4 text-sm tabular-nums">${fmt(b.start_at, user.timezone)}</td>
-            <td class="py-3 text-right">
-              ${
-                b.status === "confirmed"
-                  ? `<form method="post" action="/dashboard/bookings/${b.id}/cancel">
-                       <button class="mf-btn-ghost" type="submit">Cancel</button>
-                     </form>`
-                  : `<span class="text-sm text-muted">${escapeHtml(b.status)}</span>`
-              }
-            </td>
-          </tr>`,
-        )
-        .join("")
-    : `<tr><td colspan="4" class="py-6 text-center text-sm text-muted">Nothing here.</td></tr>`;
+  const statusBadge = (status: string) =>
+    status === "confirmed"
+      ? badge("success", "Confirmed")
+      : status === "cancelled"
+        ? badge("danger", "Cancelled")
+        : badge("neutral", status, false);
+
+  const rows = bookings.map((b) => [
+    `<div class="font-medium text-ink">${escapeHtml(b.guest_name)}</div>
+     <div class="text-[0.8125rem] text-muted">${escapeHtml(b.guest_email)}</div>
+     ${
+       b.notes
+         ? `<p class="mt-1.5 max-w-sm border-l-2 border-line pl-2.5 text-[0.8125rem] text-muted">${escapeHtml(
+             b.notes,
+           )}</p>`
+         : ""
+     }`,
+    `<span class="text-body">${escapeHtml(b.event_name)}</span>`,
+    whenCell(b.start_at, user.timezone),
+    statusBadge(b.status),
+    b.status === "confirmed"
+      ? `<form method="post" action="/dashboard/bookings/${b.id}/cancel">
+           ${button({ label: "Cancel", variant: "danger", size: "sm" })}
+         </form>`
+      : "",
+  ]);
+
+  const emptyCopy: Record<string, string> = {
+    upcoming: "Nothing on the calendar yet. Share your booking link to get started.",
+    past: "Completed meetings will be listed here.",
+    cancelled: "Cancelled bookings are kept for your records — none so far.",
+  };
 
   return layout({
     title: "Bookings",
@@ -174,14 +285,37 @@ export function bookingsPage(
     activeNav: "/dashboard/bookings",
     hostName: user.name,
     body: `
-      <h1 class="mb-4 text-2xl font-semibold tracking-tight">Bookings</h1>
-      <div class="mb-4 flex gap-1">${tab("upcoming", "Upcoming")}${tab("past", "Past")}${tab(
-        "cancelled",
-        "Cancelled",
-      )}</div>
-      <div class="mf-card"><table class="w-full text-sm"><tbody>${rows}</tbody></table></div>`,
+      ${pageHeader({
+        eyebrow: "Your calendar",
+        title: "Bookings",
+        subtitle: `Shown in ${user.timezone}.`,
+      })}
+
+      <div class="mb-4 inline-flex rounded-lg border border-line bg-surface p-1 shadow-xs">
+        ${tab("upcoming", "Upcoming")}${tab("past", "Past")}${tab("cancelled", "Cancelled")}
+      </div>
+
+      <section class="ui-card overflow-hidden">
+        ${table({
+          columns: [
+            { label: "Guest" },
+            { label: "Event type" },
+            { label: "When" },
+            { label: "Status" },
+            { label: "", align: "right" },
+          ],
+          rowsHtml: rows,
+          emptyHtml: emptyState({
+            icon: "inbox",
+            title: `No ${scope} bookings`,
+            body: emptyCopy[scope] ?? "Nothing here.",
+          }),
+        })}
+      </section>`,
   });
 }
+
+/* -------------------------------------------------------------------------- */
 
 export function settingsPage(user: PublicUser): string {
   return layout({
@@ -190,18 +324,43 @@ export function settingsPage(user: PublicUser): string {
     activeNav: "/dashboard/settings",
     hostName: user.name,
     body: `
-      <h1 class="mb-6 text-2xl font-semibold tracking-tight">Settings</h1>
-      <form class="mf-card grid max-w-md gap-4" method="post" action="/dashboard/settings">
-        <div><label class="mf-label" for="name">Name</label>
-          <input class="mf-input" id="name" name="name" value="${escapeHtml(
-            user.name,
-          )}" required></div>
-        <div><label class="mf-label" for="timezone">Timezone</label>
-          ${timezoneSelect({ name: "timezone", selected: user.timezone })}</div>
-        <div><p class="mf-label">Public page</p>
-          <p class="text-sm text-muted">/${escapeHtml(user.slug)}</p></div>
-        <div><button class="mf-btn" type="submit">Save</button></div>
-      </form>
+      ${pageHeader({
+        eyebrow: "Account",
+        title: "Settings",
+        subtitle: "How you appear to guests, and the timezone your availability is in.",
+      })}
+
+      <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <form class="ui-card ui-card-pad space-y-4" method="post" action="/dashboard/settings">
+          ${field({ name: "name", label: "Name", value: user.name })}
+          ${field({
+            name: "timezone",
+            label: "Timezone",
+            hint: "Availability and booking times are interpreted in this zone.",
+            controlHtml: timezoneSelect({ name: "timezone", selected: user.timezone }),
+          })}
+          <div class="flex justify-end border-t border-line pt-4">
+            ${button({ label: "Save changes", variant: "primary", icon: "check" })}
+          </div>
+        </form>
+
+        <aside class="ui-card ui-card-pad h-fit">
+          <p class="ui-eyebrow mb-2">Public page</p>
+          <p class="font-mono text-[0.8125rem] break-all text-ink">/${escapeHtml(user.slug)}</p>
+          <p class="mt-2 text-[0.8125rem] text-muted">
+            Your username is permanent for now — existing booking links depend on it.
+          </p>
+          <div class="mt-4">
+            ${button({
+              label: "Open",
+              href: `/${user.slug}`,
+              variant: "secondary",
+              size: "sm",
+              icon: "globe",
+            })}
+          </div>
+        </aside>
+      </div>
       ${TIMEZONE_SCRIPT}`,
   });
 }

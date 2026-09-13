@@ -12,3 +12,6 @@ package-lock.json
 
 # Historical record of what was planned; not living source.
 docs/superpowers/plans/
+
+# Vendored font binaries.
+public/fonts/
