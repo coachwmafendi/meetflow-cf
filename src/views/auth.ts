@@ -1,4 +1,5 @@
 import { escapeHtml, layout } from "./layout";
+import { TIMEZONE_SCRIPT, timezoneSelect } from "./timezoneSelect";
 
 function field(name: string, label: string, type = "text", extra = ""): string {
   return `
@@ -8,13 +9,13 @@ function field(name: string, label: string, type = "text", extra = ""): string {
     </div>`;
 }
 
-const TZ_SCRIPT = `
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      var tz = document.getElementById('timezone');
-      if (tz && !tz.value) tz.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    });
-  </script>`;
+function timezoneField(): string {
+  return `
+    <div class="mb-4">
+      <label class="mf-label" for="timezone">Timezone</label>
+      ${timezoneSelect({ name: "timezone", selected: "UTC", autodetect: true })}
+    </div>`;
+}
 
 export function loginPage(error?: string): string {
   return layout({
@@ -63,13 +64,13 @@ export function registerPage(error?: string): string {
           ${field("email", "Email", "email")}
           ${field("password", "Password", "password", 'minlength="8"')}
           ${field("slug", "Username", "text", 'pattern="[a-z0-9][a-z0-9-]{1,30}[a-z0-9]"')}
-          ${field("timezone", "Timezone")}
+          ${timezoneField()}
           <button class="mf-btn w-full" type="submit">Create account</button>
         </form>
         <p class="mt-4 text-center text-sm text-muted">
           Already have an account? <a class="underline" href="/login">Sign in</a>
         </p>
       </div>
-      ${TZ_SCRIPT}`,
+      ${TIMEZONE_SCRIPT}`,
   });
 }

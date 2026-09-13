@@ -2,6 +2,7 @@ import { escapeHtml, layout } from "./layout";
 import type { BookingWithEvent, DashboardStats } from "../db/bookings";
 import type { AvailabilityRuleRow, EventTypeRow, PublicUser } from "../types";
 import { utcToZonedParts } from "../lib/timezone";
+import { TIMEZONE_SCRIPT, timezoneSelect } from "./timezoneSelect";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -196,12 +197,11 @@ export function settingsPage(user: PublicUser): string {
             user.name,
           )}" required></div>
         <div><label class="mf-label" for="timezone">Timezone</label>
-          <input class="mf-input" id="timezone" name="timezone" value="${escapeHtml(
-            user.timezone,
-          )}" required></div>
+          ${timezoneSelect({ name: "timezone", selected: user.timezone })}</div>
         <div><p class="mf-label">Public page</p>
           <p class="text-sm text-muted">/${escapeHtml(user.slug)}</p></div>
         <div><button class="mf-btn" type="submit">Save</button></div>
-      </form>`,
+      </form>
+      ${TIMEZONE_SCRIPT}`,
   });
 }
