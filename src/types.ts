@@ -1,8 +1,9 @@
-export interface Env {
-  DB: D1Database;
-  ASSETS: Fetcher;
-  SESSION_SECRET: string;
-}
+/**
+ * Worker bindings. Generated from wrangler.jsonc by `wrangler types` into
+ * worker-configuration.d.ts, plus the secrets declared in src/env.d.ts.
+ * Re-run `npx wrangler types` after changing bindings.
+ */
+export type Env = Cloudflare.Env;
 
 export interface UserRow {
   id: number;

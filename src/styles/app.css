@@ -1,0 +1,32 @@
+@import "tailwindcss";
+@source "../**/*.ts";
+
+@theme {
+  --color-ink: oklch(0.21 0.02 264);
+  --color-muted: oklch(0.55 0.02 264);
+  --color-line: oklch(0.92 0.005 264);
+  --color-accent: oklch(0.55 0.19 264);
+}
+
+@layer components {
+  .mf-card {
+    @apply rounded-xl border border-line bg-white p-6 shadow-sm;
+  }
+  .mf-btn {
+    @apply inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2.5
+           text-sm font-medium text-white transition hover:opacity-90
+           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent
+           disabled:opacity-50;
+  }
+  .mf-btn-ghost {
+    @apply inline-flex items-center justify-center rounded-lg border border-line
+           px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-neutral-50;
+  }
+  .mf-input {
+    @apply w-full rounded-lg border border-line px-3 py-2.5 text-sm
+           focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent;
+  }
+  .mf-label {
+    @apply mb-1.5 block text-sm font-medium text-ink;
+  }
+}

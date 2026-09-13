@@ -16,7 +16,7 @@ availabilityRoutes.get("/", async (c) => {
 });
 
 availabilityRoutes.put("/", async (c) => {
-  const body = await c.req.json<{ rules?: unknown }>().catch(() => ({}));
+  const body = await c.req.json<{ rules?: unknown }>().catch(() => ({}) as { rules?: unknown });
   if (!Array.isArray(body.rules)) return c.json({ error: "rules must be an array" }, 400);
   if (body.rules.length > 70) return c.json({ error: "Too many availability rules" }, 400);
 

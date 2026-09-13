@@ -1,5 +1,6 @@
-declare module "cloudflare:test" {
-  interface ProvidedEnv extends import("../src/types").Env {
-    TEST_MIGRATIONS: D1Migration[];
+// Test-only binding, injected by vitest.config.ts so setup.ts can apply migrations.
+declare namespace Cloudflare {
+  interface Env {
+    TEST_MIGRATIONS: import("@cloudflare/vitest-pool-workers").D1Migration[];
   }
 }

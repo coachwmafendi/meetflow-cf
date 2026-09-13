@@ -16,12 +16,13 @@
     "deploy": "npm run css && wrangler deploy"
   },
   "dependencies": {
+    "alpinejs": "^3.17.2",
     "hono": "^4.13.7"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
-    "@cloudflare/workers-types": "^5.20260911.1",
     "@tailwindcss/cli": "^4.3.3",
+    "@types/node": "^26.5.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11",

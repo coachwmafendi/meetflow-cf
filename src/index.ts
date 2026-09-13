@@ -5,6 +5,7 @@ import { bookingRoutes } from "./routes/api.bookings";
 import { availabilityRoutes } from "./routes/api.availability";
 import { eventTypeRoutes } from "./routes/api.eventTypes";
 import { publicRoutes } from "./routes/api.public";
+import { pageRoutes } from "./routes/pages";
 import type { AppEnv } from "./types";
 
 const app = new Hono<AppEnv>();
@@ -18,6 +19,8 @@ app.route("/api/event-types", eventTypeRoutes);
 app.route("/api/availability", availabilityRoutes);
 app.route("/api/public", publicRoutes);
 app.route("/api/bookings", bookingRoutes);
+
+app.route("/", pageRoutes);
 
 app.onError((err, c) => {
   console.error(err);

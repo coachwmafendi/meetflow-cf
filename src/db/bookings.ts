@@ -177,9 +177,9 @@ export async function dashboardStats(
       .bind(userId),
   ]);
   return {
-    upcoming: upcoming.results[0]?.n ?? 0,
-    today: today.results[0]?.n ?? 0,
-    total: total.results[0]?.n ?? 0,
-    activeEventTypes: active.results[0]?.n ?? 0,
+    upcoming: upcoming?.results[0]?.n ?? 0,
+    today: today?.results[0]?.n ?? 0,
+    total: total?.results[0]?.n ?? 0,
+    activeEventTypes: active?.results[0]?.n ?? 0,
   };
 }

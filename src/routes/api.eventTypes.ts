@@ -23,7 +23,7 @@ eventTypeRoutes.get("/", async (c) => {
 
 eventTypeRoutes.post("/", async (c) => {
   const user = c.get("user");
-  const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+  const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
   try {
     const name = requireString(body, "name", { max: 100 });
     const slug = requireString(body, "slug", { max: 60 }).toLowerCase();
@@ -63,7 +63,7 @@ eventTypeRoutes.patch("/:id", async (c) => {
   const current = await getEventTypeOwned(c.env.DB, id, user.id);
   if (!current) return c.json({ error: "Not found" }, 404);
 
-  const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+  const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
   try {
     const merged = {
       name: body.name === undefined ? current.name : requireString(body, "name", { max: 100 }),
