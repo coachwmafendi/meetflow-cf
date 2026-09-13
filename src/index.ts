@@ -27,4 +27,6 @@ app.onError((err, c) => {
   return c.json({ error: "Internal Server Error" }, 500);
 });
 
+export { RateLimiter } from "./rateLimiter";
+
 export default app;

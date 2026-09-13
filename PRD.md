@@ -97,7 +97,7 @@ No Cloudflare Pages project is required.
 - Workers
 - D1
 - Workers Assets
-- Rate Limiting binding (guards the public booking endpoint)
+- Durable Objects (SQLite-backed; rate limits the public booking endpoint)
 
 #### Add when needed
 
@@ -666,9 +666,13 @@ The application must:
 - Rate-limit public endpoints when practical
 
 `POST /api/public/:username/:eventSlug/book` is rate limited to 10 requests per minute per
-client IP via the Workers Rate Limiting binding, keyed on `CF-Connecting-IP` (edge-set, so a
-client cannot spoof it). Over the limit returns `429` with `Retry-After: 60`. Counters are
-per-colo, so this is an abuse guard rather than an exact quota.
+client IP, keyed on `CF-Connecting-IP` (edge-set, so a client cannot spoof it). Over the
+limit returns `429` with `Retry-After`.
+
+This is implemented with the `RateLimiter` Durable Object, **not** the Workers Rate Limiting
+binding. That binding was tried first: it configures cleanly and appears in `wrangler deploy`
+output, but does not reject on this account — verified in production at `limit: 2, period: 60`
+with 8 sequential requests from a single IP, all allowed.
 
 A host must never be able to access another host's:
 

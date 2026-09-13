@@ -4,8 +4,8 @@ import type { AppEnv } from "../types";
 
 /**
  * Caller identity for rate limiting. `CF-Connecting-IP` is set by the edge and
- * cannot be spoofed by the client; the other headers are only a local-dev
- * convenience and are never present in production.
+ * cannot be spoofed by the client; the other header is only a local-dev
+ * convenience and is never trusted in production.
  */
 export function clientKey(c: Context<AppEnv>): string {
   const cf = c.req.header("cf-connecting-ip");
@@ -17,30 +17,41 @@ export function clientKey(c: Context<AppEnv>): string {
 export interface RateLimitOptions {
   /** Namespaces the counter so separate endpoints do not share a bucket. */
   bucket: string;
+  /** Requests allowed per window. Overridable per-environment via RATE_LIMIT_MAX. */
+  limit: number;
+  /** Window length in seconds. */
+  periodSeconds?: number;
 }
 
 /**
- * Rejects with 429 once the caller exceeds the limit configured for the
- * binding in wrangler.jsonc. Counters are per-colo, so this is an abuse
- * guard rather than an exact quota.
+ * Rejects with 429 once a caller exceeds `limit` requests per window.
  *
- * Fails open: if the binding is missing the request is allowed through, since
- * losing rate limiting is better than losing the booking endpoint. TypeScript
- * guards against the binding actually going missing — `wrangler types` emits
- * it as a required member of `Cloudflare.Env`.
+ * Backed by the RateLimiter Durable Object: one instance per `bucket:ip`, so the
+ * counter is exact and global rather than per-colo. Fails open if the binding is
+ * missing — losing rate limiting beats losing the booking endpoint.
  */
-export function rateLimit({ bucket }: RateLimitOptions) {
+export function rateLimit({ bucket, limit, periodSeconds = 60 }: RateLimitOptions) {
   return createMiddleware<AppEnv>(async (c, next) => {
-    const limiter = c.env.BOOK_RATE_LIMITER as RateLimit | undefined;
-    if (!limiter) {
-      console.warn(`rateLimit: BOOK_RATE_LIMITER binding missing, allowing ${bucket}`);
+    const namespace = c.env.RATE_LIMITER as DurableObjectNamespace<
+      import("../rateLimiter").RateLimiter
+    > | undefined;
+
+    if (!namespace) {
+      console.warn(`rateLimit: RATE_LIMITER binding missing, allowing ${bucket}`);
       return next();
     }
 
-    const { success } = await limiter.limit({ key: `${bucket}:${clientKey(c)}` });
+    const override = Number(c.env.RATE_LIMIT_MAX);
+    const effectiveLimit = Number.isFinite(override) && override > 0 ? override : limit;
+
+    const key = `${bucket}:${clientKey(c)}`;
+    const stub = namespace.get(namespace.idFromName(key));
+    const { success, resetAt } = await stub.hit(effectiveLimit, periodSeconds);
+
     if (!success) {
+      const retryAfter = Math.max(1, Math.ceil((resetAt - Date.now()) / 1000));
       return c.json({ error: "Too many requests. Please wait a moment and try again." }, 429, {
-        "retry-after": "60",
+        "retry-after": String(retryAfter),
       });
     }
 

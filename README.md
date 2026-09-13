@@ -68,7 +68,12 @@ After changing bindings in `wrangler.jsonc`, re-run `npx wrangler types` to refr
 - **`422` vs `409`**: `422` means the time was never a valid slot; `409` means it was valid
   but is already taken, which is what makes the client refresh its slot list.
 - **Rate limiting**: `POST …/book` is capped at 10/min per client IP (`CF-Connecting-IP`,
-  edge-set and unspoofable) via the Workers Rate Limiting binding. Over the limit returns
-  `429` + `Retry-After`. Counters are per-colo, so treat it as an abuse guard, not a quota.
-  The middleware fails open if the binding is absent — losing rate limiting beats losing
-  the booking endpoint.
+  edge-set and unspoofable). Over the limit returns `429` + `Retry-After`. The middleware
+  fails open if the binding is absent — losing rate limiting beats losing the booking
+  endpoint. `RATE_LIMIT_MAX` overrides the limit per environment.
+- **Why a Durable Object and not the Rate Limiting binding**: the `ratelimits` binding
+  configures cleanly and shows up in `wrangler deploy` output, but never rejects on this
+  account — verified in production at `limit: 2, period: 60` with 8 sequential requests
+  from one IP, all allowed. The `RateLimiter` DO keeps a fixed-window counter per
+  `bucket:ip`; a DO handles one request at a time, so the read-modify-write is atomic
+  and the count is exact and global rather than per-colo.

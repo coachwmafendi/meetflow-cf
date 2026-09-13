@@ -15,14 +15,13 @@
       "migrations_dir": "migrations"
     }
   ],
-  // Abuse guard for the unauthenticated booking endpoint. Counters are per-colo,
-  // not global — enough to stop hammering, not a billing control.
-  "ratelimits": [
-    {
-      "name": "BOOK_RATE_LIMITER",
-      "namespace_id": "1001",
-      "simple": { "limit": 10, "period": 60 }
-    }
-  ],
+  // Abuse guard for the unauthenticated booking endpoint. A Durable Object is used
+  // instead of the Workers Rate Limiting binding: that binding is accepted and shown
+  // in `wrangler deploy` output, but never rejects on this account (verified in
+  // production at limit=2/60s with 8 requests from a single IP).
+  "durable_objects": {
+    "bindings": [{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
   "observability": { "enabled": true }
 }

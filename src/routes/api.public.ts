@@ -59,7 +59,7 @@ publicRoutes.get("/:username/:eventSlug/slots", async (c) => {
   }
 });
 
-publicRoutes.post("/:username/:eventSlug/book", rateLimit({ bucket: "book" }), async (c) => {
+publicRoutes.post("/:username/:eventSlug/book", rateLimit({ bucket: "book", limit: 10, periodSeconds: 60 }), async (c) => {
   const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
   try {
     const booking = await createBooking(c.env.DB, {

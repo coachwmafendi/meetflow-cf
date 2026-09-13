@@ -12,16 +12,12 @@ export default defineConfig({
         bindings: {
           SESSION_SECRET: "test-secret-do-not-use-in-prod",
           TEST_MIGRATIONS: migrations,
+          // The suite books far more than 10 times a minute from one key.
+          // The real limit is exercised in test/integration/rateLimit.test.ts.
+          RATE_LIMIT_MAX: "1000000",
         },
         d1Databases: { DB: "meetflow-test" },
-        // Effectively unlimited: the suite books far more than 10 times a minute
-        // from one key. The 429 path is covered in test/unit/rateLimit.test.ts.
-        ratelimits: {
-          BOOK_RATE_LIMITER: {
-            namespace_id: "1001",
-            simple: { limit: 1_000_000, period: 60 },
-          },
-        },
+        durableObjects: { RATE_LIMITER: { className: "RateLimiter", useSQLite: true } },
       },
     }),
   ],
