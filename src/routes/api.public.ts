@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { listPublicEventTypes } from "../db/eventTypes";
 import { findUserBySlug } from "../db/users";
 import { isYmd } from "../lib/validate";
-import { rateLimit } from "../middleware/rateLimit";
+import { LIMITS, rateLimit } from "../middleware/rateLimit";
 import { getSlotsForDate } from "../services/availability";
 import { BookingError, createBooking, resolvePublicTarget } from "../services/booking";
 import type { AppEnv } from "../types";
@@ -59,7 +59,7 @@ publicRoutes.get("/:username/:eventSlug/slots", async (c) => {
   }
 });
 
-publicRoutes.post("/:username/:eventSlug/book", rateLimit({ bucket: "book", limit: 10, periodSeconds: 60 }), async (c) => {
+publicRoutes.post("/:username/:eventSlug/book", rateLimit(LIMITS.book), async (c) => {
   const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
   try {
     const booking = await createBooking(c.env.DB, {

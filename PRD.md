@@ -665,9 +665,22 @@ The application must:
 - Use server-generated IDs
 - Rate-limit public endpoints when practical
 
-`POST /api/public/:username/:eventSlug/book` is rate limited to 10 requests per minute per
-client IP, keyed on `CF-Connecting-IP` (edge-set, so a client cannot spoof it). Over the
-limit returns `429` with `Retry-After`.
+Unauthenticated endpoints are rate limited per client IP, keyed on `CF-Connecting-IP`
+(edge-set, so a client cannot spoof it). Over the limit returns `429` with `Retry-After`.
+
+| Action | Limit | Endpoints sharing the counter |
+|---|---|---|
+| Book | 10 / minute | `POST /api/public/:username/:eventSlug/book` |
+| Log in | 10 / minute | `POST /api/auth/login`, `POST /login` |
+| Register | 5 / hour | `POST /api/auth/register`, `POST /register` |
+
+The JSON API and the HTML form for one action **must** share a bucket, otherwise an attacker
+doubles their budget by alternating entry points.
+
+Auth limits are not only about credential stuffing: every login attempt runs PBKDF2 at 100k
+iterations — including for an unknown email, because the lookup miss is deliberately
+timing-equalised — so an unauthenticated caller can force expensive CPU work. The limit caps
+that too. Throttled form posts re-render the page with the error rather than returning JSON.
 
 This is implemented with the `RateLimiter` Durable Object, **not** the Workers Rate Limiting
 binding. That binding was tried first: it configures cleanly and appears in `wrangler deploy`

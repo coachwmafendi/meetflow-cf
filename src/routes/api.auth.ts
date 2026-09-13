@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { clearSession, issueSession } from "../middleware/auth";
+import { LIMITS, rateLimit } from "../middleware/rateLimit";
 import { AuthError, login, register } from "../services/auth";
 import type { AppEnv } from "../types";
 
 export const authRoutes = new Hono<AppEnv>();
 
-authRoutes.post("/register", async (c) => {
+authRoutes.post("/register", rateLimit(LIMITS.register), async (c) => {
   const body = await c.req
     .json<Record<string, string>>()
     .catch(() => ({}) as Record<string, string>);
@@ -25,7 +26,7 @@ authRoutes.post("/register", async (c) => {
   }
 });
 
-authRoutes.post("/login", async (c) => {
+authRoutes.post("/login", rateLimit(LIMITS.login), async (c) => {
   const body = await c.req
     .json<Record<string, string>>()
     .catch(() => ({}) as Record<string, string>);

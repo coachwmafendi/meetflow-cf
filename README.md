@@ -67,10 +67,14 @@ After changing bindings in `wrangler.jsonc`, re-run `npx wrangler types` to refr
   run on Workers. Sessions are stateless HMAC-signed cookies, so there is no `sessions` table.
 - **`422` vs `409`**: `422` means the time was never a valid slot; `409` means it was valid
   but is already taken, which is what makes the client refresh its slot list.
-- **Rate limiting**: `POST …/book` is capped at 10/min per client IP (`CF-Connecting-IP`,
-  edge-set and unspoofable). Over the limit returns `429` + `Retry-After`. The middleware
-  fails open if the binding is absent — losing rate limiting beats losing the booking
-  endpoint. `RATE_LIMIT_MAX` overrides the limit per environment.
+- **Rate limiting**: per client IP (`CF-Connecting-IP`, edge-set and unspoofable) — booking
+  10/min, login 10/min, registration 5/hour. Over the limit returns `429` + `Retry-After`;
+  throttled HTML form posts re-render the page with the error instead of returning JSON.
+  A given action's JSON API and HTML form share one counter (`LIMITS` in
+  `src/middleware/rateLimit.ts`), so alternating entry points does not double the budget.
+  Auth limits also cap CPU: every login attempt runs PBKDF2 at 100k iterations, even for an
+  unknown email. The middleware fails open if the binding is absent — losing rate limiting
+  beats losing the endpoint. `RATE_LIMIT_MAX` overrides every limit and exists for tests.
 - **Why a Durable Object and not the Rate Limiting binding**: the `ratelimits` binding
   configures cleanly and shows up in `wrangler deploy` output, but never rejects on this
   account — verified in production at `limit: 2, period: 60` with 8 sequential requests

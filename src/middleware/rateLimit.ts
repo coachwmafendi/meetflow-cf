@@ -21,7 +21,30 @@ export interface RateLimitOptions {
   limit: number;
   /** Window length in seconds. */
   periodSeconds?: number;
+  /**
+   * Renders the rejection. Defaults to JSON; HTML form routes pass a renderer so
+   * a throttled human sees the page again rather than a bare JSON blob.
+   */
+  onLimited?: (c: Context<AppEnv>, retryAfterSeconds: number) => Response;
 }
+
+/**
+ * Shared limit definitions. The JSON API and the HTML form for a given action
+ * MUST use the same bucket, otherwise an attacker doubles their budget by
+ * alternating between the two entry points.
+ */
+export const LIMITS = {
+  /** Unauthenticated write. */
+  book: { bucket: "book", limit: 10, periodSeconds: 60 },
+  /**
+   * Every attempt runs PBKDF2 (100k iterations) even for an unknown email, so
+   * this caps CPU burn as much as it caps credential stuffing. Ten a minute is
+   * far above what a human retrying a password needs.
+   */
+  login: { bucket: "login", limit: 10, periodSeconds: 60 },
+  /** Account creation also runs PBKDF2, and bulk signups are pure spam. */
+  register: { bucket: "register", limit: 5, periodSeconds: 3600 },
+} as const satisfies Record<string, { bucket: string; limit: number; periodSeconds: number }>;
 
 /**
  * Rejects with 429 once a caller exceeds `limit` requests per window.
@@ -30,7 +53,7 @@ export interface RateLimitOptions {
  * counter is exact and global rather than per-colo. Fails open if the binding is
  * missing — losing rate limiting beats losing the booking endpoint.
  */
-export function rateLimit({ bucket, limit, periodSeconds = 60 }: RateLimitOptions) {
+export function rateLimit({ bucket, limit, periodSeconds = 60, onLimited }: RateLimitOptions) {
   return createMiddleware<AppEnv>(async (c, next) => {
     const namespace = c.env.RATE_LIMITER as DurableObjectNamespace<
       import("../rateLimiter").RateLimiter
@@ -50,6 +73,11 @@ export function rateLimit({ bucket, limit, periodSeconds = 60 }: RateLimitOption
 
     if (!success) {
       const retryAfter = Math.max(1, Math.ceil((resetAt - Date.now()) / 1000));
+      if (onLimited) {
+        const res = onLimited(c, retryAfter);
+        res.headers.set("retry-after", String(retryAfter));
+        return res;
+      }
       return c.json({ error: "Too many requests. Please wait a moment and try again." }, 429, {
         "retry-after": String(retryAfter),
       });

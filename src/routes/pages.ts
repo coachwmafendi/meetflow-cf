@@ -14,6 +14,7 @@ import { isoUtc, nowIso } from "../lib/time";
 import { isValidTimeZone, zonedDateString, zonedToUtc } from "../lib/timezone";
 import { isEventSlug, isHhmm } from "../lib/validate";
 import { clearSession, issueSession } from "../middleware/auth";
+import { LIMITS, rateLimit } from "../middleware/rateLimit";
 import { AuthError, login, register } from "../services/auth";
 import { BookingError, cancelOwnedBooking } from "../services/booking";
 import { loginPage, registerPage } from "../views/auth";
@@ -50,7 +51,18 @@ pageRoutes.get("/register", (c) =>
   c.get("user") ? c.redirect("/dashboard") : html(registerPage()),
 );
 
-pageRoutes.post("/login", async (c) => {
+/** Renders a throttled form submission as the page again, not as raw JSON. */
+function throttled(render: (error: string) => string) {
+  return (_c: unknown, retryAfter: number) => {
+    const unit = retryAfter === 1 ? "second" : "seconds";
+    return html(render(`Too many attempts. Please try again in ${retryAfter} ${unit}.`), 429);
+  };
+}
+
+const loginLimit = rateLimit({ ...LIMITS.login, onLimited: throttled(loginPage) });
+const registerLimit = rateLimit({ ...LIMITS.register, onLimited: throttled(registerPage) });
+
+pageRoutes.post("/login", loginLimit, async (c) => {
   const form = await c.req.parseBody();
   const user = await login(c.env.DB, String(form.email ?? ""), String(form.password ?? ""));
   if (!user) return html(loginPage("Invalid email or password"), 401);
@@ -58,7 +70,7 @@ pageRoutes.post("/login", async (c) => {
   return c.redirect("/dashboard", 302);
 });
 
-pageRoutes.post("/register", async (c) => {
+pageRoutes.post("/register", registerLimit, async (c) => {
   const form = await c.req.parseBody();
   try {
     const user = await register(c.env.DB, {
