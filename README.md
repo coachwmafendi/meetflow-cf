@@ -37,10 +37,20 @@ columns) and comparing churn across widths — 80 rewrote 1036 lines, 100 rewrot
 `wrangler.jsonc` is excluded from trailing commas so it stays readable by strict JSON parsers,
 and the generated `worker-configuration.d.ts` plus the plan documents are left alone entirely.
 
+## Infrastructure
+
+| Binding        | Resource       | Purpose                    |
+| -------------- | -------------- | -------------------------- |
+| `DB`           | D1             | Source of truth            |
+| `RATE_LIMITER` | Durable Object | Exact per-IP rate limiting |
+| `AVATARS`      | R2             | Host profile photos        |
+| `ASSETS`       | Workers Assets | CSS, fonts, Alpine         |
+
 ## Deploy
 
 ```bash
 npx wrangler d1 create meetflow-db          # once; copy the id into wrangler.jsonc
+npx wrangler r2 bucket create meetflow-avatars
 npx wrangler secret put SESSION_SECRET      # a long random string
 npm run db:migrate:remote
 npm run deploy
@@ -55,6 +65,15 @@ node -e "console.log(crypto.randomUUID() + crypto.randomUUID())"
 After changing bindings in `wrangler.jsonc`, re-run `npx wrangler types` to refresh
 `worker-configuration.d.ts`.
 
+## Features
+
+Host: register, sign in, event types (create/edit/activate/deactivate/delete), weekly
+availability with multiple windows per day, bookings list with cancel, avatar upload,
+timezone, light/dark/system theme.
+
+Guest: public profile, booking page with live slot availability, confirmation page. No account
+needed.
+
 ## Layout
 
 - `src/lib/` — pure, dependency-free logic (time, timezone, slots, crypto, validation)
@@ -63,6 +82,8 @@ After changing bindings in `wrangler.jsonc`, re-run `npx wrangler types` to refr
 - `src/routes/` — HTTP surface (`api.*.ts` for JSON, `pages.ts` for HTML)
 - `src/views/` — HTML strings
 - `migrations/` — D1 schema
+- `src/styles/app.css` — design tokens and component classes
+- `src/views/ui.ts` — the component layer (button, field, table, badge, avatar, icons…)
 
 ## Design notes
 

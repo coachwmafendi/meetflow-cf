@@ -44,6 +44,8 @@ export const LIMITS = {
   login: { bucket: "login", limit: 10, periodSeconds: 60 },
   /** Account creation also runs PBKDF2, and bulk signups are pure spam. */
   register: { bucket: "register", limit: 5, periodSeconds: 3600 },
+  /** Authenticated, but each upload writes up to 2MB to R2. */
+  avatar: { bucket: "avatar", limit: 20, periodSeconds: 3600 },
 } as const satisfies Record<string, { bucket: string; limit: number; periodSeconds: number }>;
 
 /**

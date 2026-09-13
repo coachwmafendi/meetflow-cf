@@ -12,6 +12,8 @@ export interface UserRow {
   password_hash: string;
   slug: string;
   timezone: string;
+  /** R2 object key, or null while the host still uses their monogram. */
+  avatar_key: string | null;
   created_at: string;
   updated_at: string;
 }

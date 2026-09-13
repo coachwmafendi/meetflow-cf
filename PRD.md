@@ -98,11 +98,11 @@ No Cloudflare Pages project is required.
 - D1
 - Workers Assets
 - Durable Objects (SQLite-backed; rate limits the public booking endpoint)
+- R2 (host avatars)
 
 #### Add when needed
 
 - KV
-- R2
 - Queues
 - Cron Triggers
 
@@ -499,11 +499,14 @@ Sarah     Demo            16:00
 Host can:
 
 - Create event type
-- Edit event type
+- Edit event type (`/dashboard/event-types/:id`)
 - Activate event type
 - Deactivate event type
 - Delete event type
 - Copy public URL
+
+Delete is safe by construction: an event type with bookings is deactivated instead of removed,
+so historical bookings keep their event name. The button text says which will happen.
 
 Event type card:
 
@@ -586,6 +589,14 @@ The page should be:
 - Fast
 - Accessible
 - Mobile friendly
+
+### Theming
+
+Light and dark are both supported and follow the visitor's OS preference. Hosts additionally
+get a toggle in the dashboard header that cycles light → dark → follow-the-OS and persists in
+`localStorage`; guests follow their OS only, to keep the booking page uncluttered.
+
+Dark mode is a pure design-token swap — there are no `dark:` variants in the markup.
 
 ---
 
@@ -758,11 +769,16 @@ Future use:
 
 ### R2
 
-Do not use initially.
+**In use** — host avatars. This is a deliberate departure from the original "do not use
+initially" position, made at the product owner's request after the MVP shipped.
+
+Objects are served back through the Worker rather than from a public bucket URL, so the
+response carries the Content-Type sniffed at upload plus `nosniff` and a sandboxing CSP.
+Uploads are validated by magic bytes, not by the declared Content-Type or filename, and SVG
+is rejected outright because it can carry script.
 
 Future use:
 
-- User avatars
 - Uploaded images
 - Files
 

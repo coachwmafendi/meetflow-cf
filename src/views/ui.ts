@@ -245,6 +245,38 @@ export function statTile(label: string, value: string | number, iconName: IconNa
     </div>`;
 }
 
+/**
+ * Host avatar: the uploaded image when there is one, otherwise initials.
+ * `sizeClass` must set both dimensions (e.g. "size-12").
+ */
+export function avatar(
+  name: string,
+  avatarKey: string | null,
+  sizeClass = "size-12",
+  textClass = "text-base",
+): string {
+  const size = escapeHtml(sizeClass);
+
+  if (avatarKey) {
+    return `<img src="/${escapeHtml(avatarKey)}" alt="${escapeHtml(name)}"
+              class="${size} shrink-0 rounded-full border border-line object-cover"
+              loading="lazy" decoding="async">`;
+  }
+
+  const initials =
+    name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0] ?? "")
+      .join("")
+      .toUpperCase() || "?";
+
+  return `<span class="${size} ${escapeHtml(textClass)} flex shrink-0 items-center justify-center
+                rounded-full border border-line bg-subtle font-semibold tracking-tight text-ink"
+            aria-hidden="true">${escapeHtml(initials)}</span>`;
+}
+
 /** Monospaced time/date, the product's typographic signature. */
 export function time(text: string, className = ""): string {
   return `<span class="ui-time ${escapeHtml(className)}">${escapeHtml(text)}</span>`;

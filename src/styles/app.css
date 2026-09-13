@@ -38,9 +38,12 @@
   --color-ink: oklch(0.205 0.015 265);
 
   /* Primary is near-black rather than a brand hue — the calm, high-contrast
-     move that makes scheduling UI read as a tool instead of a landing page. */
+     move that makes scheduling UI read as a tool instead of a landing page.
+     In dark mode it inverts to near-white, which is why the foreground is a
+     token rather than a literal `text-white`. */
   --color-primary: oklch(0.205 0.015 265);
   --color-primary-hover: oklch(0.3 0.015 265);
+  --color-on-primary: oklch(1 0 0);
 
   --color-accent: oklch(0.55 0.17 258);
   --color-accent-soft: oklch(0.96 0.025 258);
@@ -67,6 +70,82 @@
     0 12px 32px -8px oklch(0.2 0.02 265 / 0.12), 0 4px 12px -4px oklch(0.2 0.02 265 / 0.06);
 
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* ---------------------------------------------------------------------------
+   Dark mode is a pure token swap — no `dark:` variants anywhere in the markup,
+   because every surface and text colour already goes through a semantic token.
+   Two triggers: the OS preference, and an explicit [data-theme] set by the
+   host's toggle. `:not([data-theme="light"])` lets that toggle win over the OS.
+--------------------------------------------------------------------------- */
+@layer theme {
+  :root {
+    --select-chevron: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236b7280' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --select-chevron: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23a1a1aa' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+      --color-canvas: oklch(0.155 0.008 265);
+      --color-surface: oklch(0.196 0.009 265);
+      --color-subtle: oklch(0.244 0.01 265);
+      --color-line: oklch(0.288 0.011 265);
+      --color-line-strong: oklch(0.36 0.013 265);
+      --color-muted: oklch(0.64 0.013 265);
+      --color-body: oklch(0.812 0.011 265);
+      --color-ink: oklch(0.975 0.004 265);
+
+      --color-primary: oklch(0.975 0.004 265);
+      --color-primary-hover: oklch(0.885 0.006 265);
+      --color-on-primary: oklch(0.17 0.012 265);
+
+      --color-accent: oklch(0.72 0.15 258);
+      --color-accent-soft: oklch(0.28 0.06 258);
+
+      --color-success: oklch(0.76 0.15 155);
+      --color-success-soft: oklch(0.28 0.06 155);
+      --color-danger: oklch(0.72 0.17 25);
+      --color-danger-soft: oklch(0.29 0.07 25);
+      --color-warning: oklch(0.8 0.14 75);
+      --color-warning-soft: oklch(0.3 0.06 75);
+
+      --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.3);
+      --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.36), 0 1px 2px -1px oklch(0 0 0 / 0.3);
+      --shadow-md: 0 4px 12px -2px oklch(0 0 0 / 0.44), 0 2px 6px -2px oklch(0 0 0 / 0.32);
+      --shadow-lg: 0 12px 32px -8px oklch(0 0 0 / 0.55), 0 4px 12px -4px oklch(0 0 0 / 0.35);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --select-chevron: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23a1a1aa' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+    --color-canvas: oklch(0.155 0.008 265);
+    --color-surface: oklch(0.196 0.009 265);
+    --color-subtle: oklch(0.244 0.01 265);
+    --color-line: oklch(0.288 0.011 265);
+    --color-line-strong: oklch(0.36 0.013 265);
+    --color-muted: oklch(0.64 0.013 265);
+    --color-body: oklch(0.812 0.011 265);
+    --color-ink: oklch(0.975 0.004 265);
+
+    --color-primary: oklch(0.975 0.004 265);
+    --color-primary-hover: oklch(0.885 0.006 265);
+    --color-on-primary: oklch(0.17 0.012 265);
+
+    --color-accent: oklch(0.72 0.15 258);
+    --color-accent-soft: oklch(0.28 0.06 258);
+
+    --color-success: oklch(0.76 0.15 155);
+    --color-success-soft: oklch(0.28 0.06 155);
+    --color-danger: oklch(0.72 0.17 25);
+    --color-danger-soft: oklch(0.29 0.07 25);
+    --color-warning: oklch(0.8 0.14 75);
+    --color-warning-soft: oklch(0.3 0.06 75);
+
+    --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.3);
+    --shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 0.36), 0 1px 2px -1px oklch(0 0 0 / 0.3);
+    --shadow-md: 0 4px 12px -2px oklch(0 0 0 / 0.44), 0 2px 6px -2px oklch(0 0 0 / 0.32);
+    --shadow-lg: 0 12px 32px -8px oklch(0 0 0 / 0.55), 0 4px 12px -4px oklch(0 0 0 / 0.35);
+  }
 }
 
 @layer base {
@@ -104,7 +183,7 @@
 
   ::selection {
     background: var(--color-ink);
-    color: white;
+    color: var(--color-canvas);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -146,7 +225,7 @@
   }
 
   .ui-btn-primary {
-    @apply bg-primary text-white hover:bg-primary-hover;
+    @apply bg-primary text-on-primary hover:bg-primary-hover;
   }
 
   .ui-btn-secondary {
@@ -182,7 +261,7 @@
 
   .ui-select {
     @apply appearance-none bg-no-repeat pr-9;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236b7280' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+    background-image: var(--select-chevron);
     background-position: right 0.7rem center;
     background-size: 1rem;
   }

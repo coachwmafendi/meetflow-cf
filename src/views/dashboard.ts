@@ -1,6 +1,18 @@
 import { escapeHtml, layout } from "./layout";
 import { TIMEZONE_SCRIPT, timezoneSelect } from "./timezoneSelect";
-import { badge, button, emptyState, field, icon, pageHeader, statTile, table, time } from "./ui";
+import {
+  alert,
+  avatar,
+  badge,
+  button,
+  emptyState,
+  field,
+  icon,
+  pageHeader,
+  statTile,
+  table,
+  time,
+} from "./ui";
 import type { BookingWithEvent, DashboardStats } from "../db/bookings";
 import type { AvailabilityRuleRow, EventTypeRow, PublicUser } from "../types";
 import { utcToZonedParts } from "../lib/timezone";
@@ -125,7 +137,13 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[]): st
           <p class="mt-2.5 truncate font-mono text-[0.75rem] text-muted">${escapeHtml(path)}</p>
         </div>
         <div class="flex shrink-0 items-center gap-2">
-          ${button({ label: "Preview", href: path, variant: "secondary", size: "sm", icon: "link" })}
+          ${button({ label: "Preview", href: path, variant: "ghost", size: "sm", icon: "link" })}
+          ${button({
+            label: "Edit",
+            href: `/dashboard/event-types/${e.id}`,
+            variant: "secondary",
+            size: "sm",
+          })}
         </div>
       </article>`;
     })
@@ -187,29 +205,152 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[]): st
 
 /* -------------------------------------------------------------------------- */
 
+export function eventTypeEditPage(
+  user: PublicUser,
+  eventType: EventTypeRow,
+  bookingCount: number,
+  error?: string,
+): string {
+  const path = `/${user.slug}/${eventType.slug}`;
+  const active = eventType.is_active === 1;
+
+  // A type with history can never be hard-deleted, or its bookings lose their
+  // event name. Say so on the button rather than surprising the host after.
+  const destructive =
+    bookingCount > 0
+      ? {
+          label: "Deactivate permanently",
+          note: `${bookingCount} booking${bookingCount === 1 ? "" : "s"} reference this event type, so it is deactivated rather than deleted.`,
+        }
+      : {
+          label: "Delete event type",
+          note: "No bookings reference it, so it will be removed entirely.",
+        };
+
+  return layout({
+    title: `Edit ${eventType.name}`,
+    nav: "host",
+    activeNav: "/dashboard/event-types",
+    hostName: user.name,
+    body: `
+      <a href="/dashboard/event-types" class="ui-btn ui-btn-ghost ui-btn-sm -ml-2 mb-4">
+        ${icon("arrowLeft", "size-4")}<span>Event types</span>
+      </a>
+
+      ${pageHeader({
+        eyebrow: "Event type",
+        title: eventType.name,
+        subtitle: path,
+        actionsHtml: `${
+          active ? badge("success", "Active") : badge("neutral", "Inactive", false)
+        }${button({ label: "Preview", href: path, variant: "secondary", size: "sm", icon: "link" })}`,
+      })}
+
+      ${error ? `<div class="mb-4">${alert("danger", error)}</div>` : ""}
+
+      <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <form class="ui-card ui-card-pad space-y-4" method="post"
+              action="/dashboard/event-types/${eventType.id}">
+          ${field({ name: "name", label: "Name", value: eventType.name })}
+          ${field({
+            name: "slug",
+            label: "URL slug",
+            value: eventType.slug,
+            hint: `Changing this breaks any link already shared as ${path}.`,
+          })}
+          ${field({
+            name: "duration_minutes",
+            label: "Duration",
+            type: "number",
+            value: String(eventType.duration_minutes),
+            hint: "Minutes. Existing bookings keep their original length.",
+            attrsHtml: 'min="5" max="480" step="5"',
+          })}
+          ${field({
+            name: "description",
+            label: "Description",
+            required: false,
+            value: eventType.description ?? "",
+          })}
+          <div class="flex justify-end border-t border-line pt-4">
+            ${button({ label: "Save changes", variant: "primary", icon: "check" })}
+          </div>
+        </form>
+
+        <div class="space-y-4">
+          <section class="ui-card ui-card-pad">
+            <p class="ui-eyebrow mb-2">Visibility</p>
+            <p class="text-[0.8125rem] text-muted">
+              ${
+                active
+                  ? "Guests can see and book this event type."
+                  : "Hidden from your public page. Existing bookings are unaffected."
+              }
+            </p>
+            <form method="post" action="/dashboard/event-types/${eventType.id}/toggle" class="mt-3">
+              ${button({
+                label: active ? "Deactivate" : "Activate",
+                variant: "secondary",
+                size: "sm",
+              })}
+            </form>
+          </section>
+
+          <section class="ui-card ui-card-pad border-danger/25">
+            <p class="ui-eyebrow mb-2 text-danger">Danger zone</p>
+            <p class="text-[0.8125rem] text-muted">${escapeHtml(destructive.note)}</p>
+            <form method="post" action="/dashboard/event-types/${eventType.id}/delete" class="mt-3"
+                  onsubmit="return confirm('${escapeHtml(destructive.label)}? This cannot be undone.')">
+              ${button({ label: destructive.label, variant: "danger", size: "sm" })}
+            </form>
+          </section>
+        </div>
+      </div>`,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+
 export function availabilityPage(user: PublicUser, rules: AvailabilityRuleRow[]): string {
   const rows = DAY_NAMES.map((day, index) => {
     const dayRules = rules.filter((r) => r.day_of_week === index);
     const active = dayRules.length > 0;
 
-    const slotRow = (start: string, end: string) => `
-      <div class="flex items-center gap-2">
+    const slotRow = (start: string, end: string, removable: boolean) => `
+      <div class="flex items-center gap-2" data-window>
         <input class="ui-input w-[9.5rem] font-mono" type="time" name="start_${index}"
                value="${start}" aria-label="${day} start time">
         <span class="text-muted" aria-hidden="true">–</span>
         <input class="ui-input w-[9.5rem] font-mono" type="time" name="end_${index}"
                value="${end}" aria-label="${day} end time">
+        <button type="button" data-remove-window
+                class="ui-btn ui-btn-ghost ui-btn-sm px-1.5 text-muted hover:text-danger ${
+                  removable ? "" : "invisible"
+                }"
+                aria-label="Remove this ${day} window">${icon("x", "size-4")}</button>
       </div>`;
 
+    // Server renders existing windows plus one blank, so the page works with no
+    // JavaScript. The Add button below clones a row for anyone who has it.
     const inputs =
-      dayRules.map((r) => slotRow(r.start_time, r.end_time)).join("") + slotRow("", "");
+      dayRules.map((r) => slotRow(r.start_time, r.end_time, true)).join("") +
+      slotRow("", "", dayRules.length > 0);
 
-    return `<div class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:gap-6">
+    return `<div class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:gap-6"
+                 data-day="${index}">
       <div class="flex w-32 shrink-0 items-center gap-2 pt-2">
         <span class="size-1.5 rounded-full ${active ? "bg-success" : "bg-line-strong"}"></span>
         <span class="text-sm font-medium ${active ? "text-ink" : "text-muted"}">${day}</span>
       </div>
-      <div class="flex flex-wrap gap-3">${inputs}</div>
+      <div class="flex flex-col gap-2">
+        <div class="flex flex-col gap-2" data-windows>${inputs}</div>
+        <div>
+          <button type="button" data-add-window
+                  class="ui-btn ui-btn-ghost ui-btn-sm -ml-1.5 text-muted hover:text-ink">
+            ${icon("plus", "size-3.5")}<span>Add a window</span>
+          </button>
+        </div>
+      </div>
     </div>`;
   }).join("");
 
@@ -230,7 +371,51 @@ export function availabilityPage(user: PublicUser, rules: AvailabilityRuleRow[])
         <div class="mt-4 flex justify-end">
           ${button({ label: "Save availability", variant: "primary", icon: "check" })}
         </div>
-      </form>`,
+      </form>
+
+      <script>
+        (function () {
+          // Blank rows are ignored by the server, so adding and clearing rows
+          // needs no round trip and no extra validation.
+          document.querySelectorAll("[data-day]").forEach(function (day) {
+            var list = day.querySelector("[data-windows]");
+
+            function refresh() {
+              var rows = list.querySelectorAll("[data-window]");
+              rows.forEach(function (row, i) {
+                var remove = row.querySelector("[data-remove-window]");
+                // The final row is the spare; keep its remove button hidden
+                // unless it is the only thing standing between empty and not.
+                remove.classList.toggle("invisible", rows.length === 1);
+                void i;
+              });
+            }
+
+            day.querySelector("[data-add-window]").addEventListener("click", function () {
+              var rows = list.querySelectorAll("[data-window]");
+              var clone = rows[rows.length - 1].cloneNode(true);
+              clone.querySelectorAll("input").forEach(function (input) { input.value = ""; });
+              list.appendChild(clone);
+              refresh();
+              clone.querySelector("input").focus();
+            });
+
+            list.addEventListener("click", function (event) {
+              var btn = event.target.closest("[data-remove-window]");
+              if (!btn) return;
+              var rows = list.querySelectorAll("[data-window]");
+              if (rows.length === 1) {
+                rows[0].querySelectorAll("input").forEach(function (i) { i.value = ""; });
+              } else {
+                btn.closest("[data-window]").remove();
+              }
+              refresh();
+            });
+
+            refresh();
+          });
+        })();
+      </script>`,
   });
 }
 
@@ -317,7 +502,7 @@ export function bookingsPage(
 
 /* -------------------------------------------------------------------------- */
 
-export function settingsPage(user: PublicUser): string {
+export function settingsPage(user: PublicUser, error?: string): string {
   return layout({
     title: "Settings",
     nav: "host",
@@ -330,7 +515,36 @@ export function settingsPage(user: PublicUser): string {
         subtitle: "How you appear to guests, and the timezone your availability is in.",
       })}
 
+      ${error ? `<div class="mb-4">${alert("danger", error)}</div>` : ""}
+
       <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div class="space-y-4">
+        <section class="ui-card ui-card-pad">
+          <p class="ui-eyebrow mb-3">Profile photo</p>
+          <div class="flex flex-wrap items-center gap-4">
+            ${avatar(user.name, user.avatar_key, "size-16", "text-xl")}
+            <div class="min-w-0 flex-1">
+              <form method="post" action="/dashboard/settings/avatar"
+                    enctype="multipart/form-data" class="flex flex-wrap items-center gap-2">
+                <input class="ui-input max-w-[15rem] py-1.5 text-[0.8125rem]
+                              file:mr-3 file:rounded file:border-0 file:bg-subtle
+                              file:px-2 file:py-1 file:text-[0.8125rem] file:text-ink"
+                       type="file" name="avatar" accept="image/png,image/jpeg,image/webp,image/gif"
+                       aria-label="Choose a profile photo" required>
+                ${button({ label: "Upload", variant: "secondary", size: "sm" })}
+              </form>
+              <p class="ui-hint">PNG, JPEG, WebP or GIF. Up to 2 MB.</p>
+            </div>
+            ${
+              user.avatar_key
+                ? `<form method="post" action="/dashboard/settings/avatar/remove">
+                     ${button({ label: "Remove", variant: "ghost", size: "sm" })}
+                   </form>`
+                : ""
+            }
+          </div>
+        </section>
+
         <form class="ui-card ui-card-pad space-y-4" method="post" action="/dashboard/settings">
           ${field({ name: "name", label: "Name", value: user.name })}
           ${field({
@@ -343,6 +557,7 @@ export function settingsPage(user: PublicUser): string {
             ${button({ label: "Save changes", variant: "primary", icon: "check" })}
           </div>
         </form>
+        </div>
 
         <aside class="ui-card ui-card-pad h-fit">
           <p class="ui-eyebrow mb-2">Public page</p>

@@ -1,6 +1,6 @@
 import { escapeHtml, layout } from "./layout";
 import { utcToZonedParts } from "../lib/timezone";
-import { badge, button, emptyState, icon } from "./ui";
+import { avatar, badge, button, emptyState, icon } from "./ui";
 import type { BookingRow, EventTypeRow, PublicUser } from "../types";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -18,21 +18,6 @@ const MONTHS = [
   "November",
   "December",
 ];
-
-/** Circular monogram — a host page needs a face, and we have no avatars yet. */
-function monogram(name: string): string {
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0] ?? "")
-    .join("")
-    .toUpperCase();
-  return `<span class="flex size-12 items-center justify-center rounded-full border border-line
-                bg-subtle text-base font-semibold tracking-tight text-ink">${escapeHtml(
-                  initials || "?",
-                )}</span>`;
-}
 
 export function profilePage(host: PublicUser, eventTypes: EventTypeRow[]): string {
   const cards = eventTypes
@@ -70,7 +55,7 @@ export function profilePage(host: PublicUser, eventTypes: EventTypeRow[]): strin
     body: `
       <div class="mx-auto max-w-lg">
         <div class="mb-8 flex flex-col items-center text-center">
-          ${monogram(host.name)}
+          ${avatar(host.name, host.avatar_key, "size-14", "text-lg")}
           <h1 class="mt-3.5 text-xl font-semibold tracking-[-0.02em] text-ink">${escapeHtml(
             host.name,
           )}</h1>
@@ -115,7 +100,7 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
             <!-- Event summary -->
             <aside class="border-b border-line p-5 sm:p-6 md:border-r md:border-b-0">
               <div class="flex items-center gap-2.5">
-                ${monogram(host.name)}
+                ${avatar(host.name, host.avatar_key, "size-10", "text-sm")}
                 <div class="min-w-0">
                   <p class="truncate text-[0.8125rem] text-muted">${escapeHtml(host.name)}</p>
                 </div>

@@ -1,6 +1,6 @@
 import type { PublicUser, UserRow } from "../types";
 
-const PUBLIC_COLUMNS = "id, name, email, slug, timezone, created_at, updated_at";
+const PUBLIC_COLUMNS = "id, name, email, slug, timezone, avatar_key, created_at, updated_at";
 
 export async function findUserByEmail(db: D1Database, email: string): Promise<UserRow | null> {
   return db.prepare("SELECT * FROM users WHERE email = ?").bind(email).first<UserRow>();
@@ -63,4 +63,16 @@ export async function updateUserSettings(
     )
     .bind(fields.name, fields.timezone, fields.now, userId)
     .first<PublicUser>();
+}
+
+export async function setAvatarKey(
+  db: D1Database,
+  userId: number,
+  avatarKey: string | null,
+  now: string,
+): Promise<void> {
+  await db
+    .prepare("UPDATE users SET avatar_key = ?, updated_at = ? WHERE id = ?")
+    .bind(avatarKey, now, userId)
+    .run();
 }

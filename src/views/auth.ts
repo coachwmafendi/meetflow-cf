@@ -18,7 +18,7 @@ function authShell(options: {
     body: `
       <div class="mx-auto w-full max-w-[22rem] py-6 sm:py-10">
         <a href="/" class="mb-8 flex items-center justify-center gap-2 text-ink" aria-label="MeetFlow">
-          <span class="flex size-7 items-center justify-center rounded-lg bg-primary text-white">
+          <span class="flex size-7 items-center justify-center rounded-lg bg-primary text-on-primary">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="size-4">
               <rect x="3" y="5" width="18" height="16" rx="4" stroke="currentColor" stroke-width="2"/>
               <path d="M8 3v4M16 3v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>

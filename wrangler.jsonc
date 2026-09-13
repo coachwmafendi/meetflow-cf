@@ -23,5 +23,8 @@
     "bindings": [{ "name": "RATE_LIMITER", "class_name": "RateLimiter" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RateLimiter"] }],
+  // Host avatars. Objects are served back through the Worker rather than a public
+  // bucket URL, so we control the Content-Type and caching headers.
+  "r2_buckets": [{ "binding": "AVATARS", "bucket_name": "meetflow-avatars" }],
   "observability": { "enabled": true }
 }
