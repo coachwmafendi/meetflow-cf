@@ -102,25 +102,16 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[]): st
 export function availabilityPage(user: PublicUser, rules: AvailabilityRuleRow[]): string {
   const rows = DAY_NAMES.map((day, index) => {
     const dayRules = rules.filter((r) => r.day_of_week === index);
-    const shown = dayRules.length ? dayRules : [{ start_time: "", end_time: "" }];
-    const inputs = shown
-      .map(
-        (r) => `<div class="flex items-center gap-2">
-          <input class="mf-input w-32" type="time" name="start_${index}" value="${r.start_time}">
+    const row = (start: string, end: string) => `<div class="flex items-center gap-2">
+          <input class="mf-input w-32" type="time" name="start_${index}" value="${start}">
           <span class="text-muted">–</span>
-          <input class="mf-input w-32" type="time" name="end_${index}" value="${r.end_time}">
-        </div>`,
-      )
-      .join("");
-    // Always offer one spare row so a second window can be added without JS.
-    const spare = `<div class="flex items-center gap-2">
-        <input class="mf-input w-32" type="time" name="start_${index}" value="">
-        <span class="text-muted">–</span>
-        <input class="mf-input w-32" type="time" name="end_${index}" value="">
-      </div>`;
-    return `<div class="flex flex-col gap-2 border-t border-line py-4 sm:flex-row sm:items-center">
-      <p class="w-32 shrink-0 text-sm font-medium">${day}</p>
-      <div class="flex flex-wrap gap-3">${inputs}${spare}</div>
+          <input class="mf-input w-32" type="time" name="end_${index}" value="${end}">
+        </div>`;
+    // Existing windows, plus exactly one blank row so another can be added without JS.
+    const inputs = dayRules.map((r) => row(r.start_time, r.end_time)).join("") + row("", "");
+    return `<div class="flex flex-col gap-2 border-t border-line py-4 sm:flex-row sm:items-start">
+      <p class="w-32 shrink-0 pt-2.5 text-sm font-medium">${day}</p>
+      <div class="flex flex-wrap gap-3">${inputs}</div>
     </div>`;
   }).join("");
 

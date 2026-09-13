@@ -65,6 +65,56 @@ describe("pages", () => {
     expect(html).toContain("&lt;script&gt;");
   });
 
+  it("round-trips the availability form without losing windows", async () => {
+    const host = await createHost("wan");
+    await SELF.fetch("https://example.com/api/availability", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({
+        rules: [
+          { day_of_week: 1, start_time: "09:00", end_time: "12:00" },
+          { day_of_week: 1, start_time: "14:00", end_time: "17:00" },
+        ],
+      }),
+    });
+
+    // Re-submit the rendered form untouched: the blank spare row must be dropped
+    // and both Monday windows must survive.
+    const form = new URLSearchParams();
+    for (let day = 0; day <= 6; day++) {
+      if (day === 1) {
+        form.append("start_1", "09:00");
+        form.append("end_1", "12:00");
+        form.append("start_1", "14:00");
+        form.append("end_1", "17:00");
+      }
+      form.append(`start_${day}`, "");
+      form.append(`end_${day}`, "");
+    }
+
+    const res = await SELF.fetch("https://example.com/dashboard/availability", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        cookie: host.cookie,
+      },
+      body: form.toString(),
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+
+    const after = await SELF.fetch("https://example.com/api/availability", {
+      headers: { cookie: host.cookie },
+    });
+    const { rules } = await after.json<{
+      rules: Array<{ day_of_week: number; start_time: string; end_time: string }>;
+    }>();
+    expect(rules.map((r) => `${r.day_of_week} ${r.start_time}-${r.end_time}`)).toEqual([
+      "1 09:00-12:00",
+      "1 14:00-17:00",
+    ]);
+  });
+
   it("logs out and clears the cookie", async () => {
     const host = await createHost("wan");
     const res = await SELF.fetch("https://example.com/logout", {
