@@ -76,4 +76,6 @@ After changing bindings in `wrangler.jsonc`, re-run `npx wrangler types` to refr
   account — verified in production at `limit: 2, period: 60` with 8 sequential requests
   from one IP, all allowed. The `RateLimiter` DO keeps a fixed-window counter per
   `bucket:ip`; a DO handles one request at a time, so the read-modify-write is atomic
-  and the count is exact and global rather than per-colo.
+  and the count is exact and global rather than per-colo. Being a *fixed* window, a caller
+  straddling a boundary can get up to 2× the limit across the two adjacent windows — fine
+  for an abuse guard. Switch to a sliding window if that ever matters.
