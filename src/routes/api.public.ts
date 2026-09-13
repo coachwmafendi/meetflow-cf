@@ -3,7 +3,7 @@ import { listPublicEventTypes } from "../db/eventTypes";
 import { findUserBySlug } from "../db/users";
 import { isYmd } from "../lib/validate";
 import { LIMITS, rateLimit } from "../middleware/rateLimit";
-import { getSlotsForDate } from "../services/availability";
+import { getMonthFreeDays, getSlotsForDate } from "../services/availability";
 import { BookingError, createBooking, resolvePublicTarget } from "../services/booking";
 import { queueBookingCreated } from "../services/email";
 import type { AppEnv } from "../types";
@@ -54,6 +54,37 @@ publicRoutes.get("/:username/:eventSlug/slots", async (c) => {
       durationMinutes: eventType.duration_minutes,
       slots,
     });
+  } catch (err) {
+    if (err instanceof BookingError) return c.json({ error: err.message }, err.status);
+    throw err;
+  }
+});
+
+publicRoutes.get("/:username/:eventSlug/month", async (c) => {
+  const year = Number(c.req.query("year"));
+  const month = Number(c.req.query("month"));
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    return c.json({ error: "year must be a 4-digit year" }, 400);
+  }
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    return c.json({ error: "month must be 1-12" }, 400);
+  }
+
+  try {
+    const { host, eventType } = await resolvePublicTarget(
+      c.env.DB,
+      c.req.param("username"),
+      c.req.param("eventSlug"),
+    );
+    const days = await getMonthFreeDays(c.env.DB, {
+      hostId: host.id,
+      hostTimezone: host.timezone,
+      durationMinutes: eventType.duration_minutes,
+      year,
+      month,
+      nowMs: Date.now(),
+    });
+    return c.json({ days });
   } catch (err) {
     if (err instanceof BookingError) return c.json({ error: err.message }, err.status);
     throw err;

@@ -1,4 +1,4 @@
-import { env } from "cloudflare:test";
+import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { getMonthFreeDays } from "../../src/services/availability";
 import { api, createHost, resetDb } from "../helpers";
@@ -115,5 +115,42 @@ describe("getMonthFreeDays", () => {
     expect(days).toHaveLength(29);
     expect(days[0]).toBe("2028-02-01");
     expect(days[28]).toBe("2028-02-29");
+  });
+});
+
+describe("GET /api/public/:username/:eventSlug/month", () => {
+  beforeEach(resetDb);
+
+  it("returns bookable days for the requested month", async () => {
+    await seed();
+    // Mondays in March 2027 (Mar 1 2027 is a Monday): 1, 8, 15, 22, 29.
+    const res = await SELF.fetch(
+      "https://example.com/api/public/wan/consultation/month?year=2027&month=3",
+    );
+    expect(res.status).toBe(200);
+    const { days } = await res.json<{ days: string[] }>();
+    expect(days).toEqual(["2027-03-01", "2027-03-08", "2027-03-15", "2027-03-22", "2027-03-29"]);
+  });
+
+  it("rejects an out-of-range month", async () => {
+    await seed();
+    const res = await SELF.fetch(
+      "https://example.com/api/public/wan/consultation/month?year=2026&month=13",
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a non-numeric year", async () => {
+    await seed();
+    const res = await SELF.fetch(
+      "https://example.com/api/public/wan/consultation/month?year=abc&month=9",
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("404s for an unknown event", async () => {
+    await seed();
+    const res = await SELF.fetch("https://example.com/api/public/wan/nope/month?year=2026&month=9");
+    expect(res.status).toBe(404);
   });
 });
