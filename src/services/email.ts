@@ -4,10 +4,12 @@ import { findUserById } from "../db/users";
 import {
   guestCancellation,
   guestConfirmation,
+  hostCancellation,
   guestReminder,
   hostNotification,
   type BookingEmailContext,
 } from "../lib/emailTemplates";
+import { cancelUrl } from "../lib/cancelToken";
 import { sendEmail, type SendOutcome } from "../lib/resend";
 import { nowIso } from "../lib/time";
 import type { Env } from "../types";
@@ -20,7 +22,7 @@ import type { Env } from "../types";
  */
 export type EmailJob =
   | { kind: "booking_confirmed"; bookingId: number; to: "guest" | "host" }
-  | { kind: "booking_cancelled"; bookingId: number; to: "guest" }
+  | { kind: "booking_cancelled"; bookingId: number; to: "guest" | "host" }
   | { kind: "booking_reminder"; bookingId: number; to: "guest" };
 
 /**
@@ -34,8 +36,18 @@ export async function queueBookingCreated(env: Env, bookingId: number): Promise<
   ]);
 }
 
-export async function queueBookingCancelled(env: Env, bookingId: number): Promise<void> {
-  await enqueue(env, [{ kind: "booking_cancelled", bookingId, to: "guest" }]);
+/**
+ * `cancelledBy` decides who needs telling: the party who did not press the
+ * button. A guest who cancels already knows; their host does not.
+ */
+export async function queueBookingCancelled(
+  env: Env,
+  bookingId: number,
+  cancelledBy: "host" | "guest" = "host",
+): Promise<void> {
+  await enqueue(env, [
+    { kind: "booking_cancelled", bookingId, to: cancelledBy === "host" ? "guest" : "host" },
+  ]);
 }
 
 async function enqueue(env: Env, jobs: EmailJob[]): Promise<void> {
@@ -78,6 +90,11 @@ async function loadContext(
       endAt: booking.end_at,
       notes: booking.notes,
       appUrl: env.APP_URL,
+      // Only guest-facing mail carries the link; the host cancels from the dashboard.
+      cancelUrl:
+        job.to === "guest" && job.kind !== "booking_cancelled"
+          ? await cancelUrl(env.APP_URL, booking.id, env.SESSION_SECRET)
+          : undefined,
     },
     guestTimeZone: booking.timezone,
     hostTimeZone: host.timezone,
@@ -102,7 +119,9 @@ export async function processEmailJob(
         ? hostNotification(ctx, hostTimeZone)
         : guestConfirmation(ctx, guestTimeZone)
       : job.kind === "booking_cancelled"
-        ? guestCancellation(ctx, guestTimeZone)
+        ? job.to === "host"
+          ? hostCancellation(ctx, hostTimeZone)
+          : guestCancellation(ctx, guestTimeZone)
         : guestReminder(ctx, guestTimeZone);
 
   return sendEmail({ apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM }, message, fetchImpl);

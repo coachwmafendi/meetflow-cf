@@ -563,6 +563,21 @@ POST /api/bookings/:id/cancel
 Cancelled bookings remain in the database.
 Do not physically delete booking records.
 
+### Guest cancellation
+
+Guests have no account, so cancellation links are authorised by an HMAC token over the booking
+id, signed under its own purpose string (domain-separated from session cookies) and validated
+against the id in the URL path.
+
+```http
+GET  /booking/:id/cancel?token=...   renders a confirmation page only
+POST /booking/:id/cancel             performs the cancellation
+```
+
+The GET **must never mutate**: mail scanners and link prefetchers follow links, and would
+otherwise cancel meetings without the guest doing anything. Cancelling is idempotent, is refused
+once the meeting has ended, and notifies the host by email.
+
 ---
 
 ## 18. Public Booking Page
@@ -825,6 +840,9 @@ trigger for reminders.
 
 Reschedule notification remains out of scope, since guests cannot reschedule yet.
 
+Guests can now cancel themselves through a signed link (see §17), which supersedes the earlier
+"guest self-service cancel" entry in the out-of-scope list.
+
 Rules:
 
 - Sending happens off the request path. A booking must never fail or hang because the mail
@@ -864,7 +882,7 @@ Do NOT build these in MVP:
 - Workflow automation
 - AI scheduling
 - Calendar synchronization
-- Guest self-service reschedule/cancel
+- Guest self-service reschedule (cancel is implemented; see §17)
 - Date-specific availability overrides and holidays
 - Buffers, minimum notice, daily booking limits
 

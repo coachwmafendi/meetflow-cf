@@ -16,6 +16,7 @@ import {
 import type { BookingWithEvent, DashboardStats } from "../db/bookings";
 import type { AvailabilityRuleRow, EventTypeRow, PublicUser } from "../types";
 import { utcToZonedParts } from "../lib/timezone";
+import { zoneDisplay } from "../lib/timezoneList";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -363,7 +364,7 @@ export function availabilityPage(user: PublicUser, rules: AvailabilityRuleRow[])
       ${pageHeader({
         eyebrow: "Weekly schedule",
         title: "Availability",
-        subtitle: `Times are in ${user.timezone}. Leave a day blank to be unavailable.`,
+        subtitle: `Times are in ${zoneDisplay(user.timezone)}. Leave a day blank to be unavailable.`,
       })}
 
       <form method="post" action="/dashboard/availability">
@@ -473,7 +474,7 @@ export function bookingsPage(
       ${pageHeader({
         eyebrow: "Your calendar",
         title: "Bookings",
-        subtitle: `Shown in ${user.timezone}.`,
+        subtitle: `Shown in ${zoneDisplay(user.timezone)}.`,
       })}
 
       <div class="mb-4 inline-flex rounded-lg border border-line bg-surface p-1 shadow-xs">

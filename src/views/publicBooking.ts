@@ -1,5 +1,6 @@
 import { escapeHtml, layout } from "./layout";
 import { utcToZonedParts } from "../lib/timezone";
+import { zoneDisplay } from "../lib/timezoneList";
 import { avatar, badge, button, emptyState, icon } from "./ui";
 import type { BookingRow, EventTypeRow, PublicUser } from "../types";
 
@@ -60,7 +61,7 @@ export function profilePage(host: PublicUser, eventTypes: EventTypeRow[]): strin
             host.name,
           )}</h1>
           <p class="mt-1 flex items-center gap-1.5 text-[0.8125rem] text-muted">
-            ${icon("globe", "size-3.5")}<span class="ui-time">${escapeHtml(host.timezone)}</span>
+            ${icon("globe", "size-3.5")}<span>${escapeHtml(zoneDisplay(host.timezone))}</span>
           </p>
         </div>
 
@@ -117,7 +118,7 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
                 </div>
                 <div class="flex items-center gap-2">
                   ${icon("globe", "size-4 shrink-0")}
-                  <dd class="ui-time truncate" x-text="guestTimezone"></dd>
+                  <dd class="truncate" x-text="timezoneLabel"></dd>
                 </div>
                 <template x-if="selected">
                   <div class="flex items-start gap-2 text-ink">
@@ -219,6 +220,19 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
           return {
             ...cfg,
             guestTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            // Mirrors zoneDisplay() on the server: people read "Kuala Lumpur
+            // (GMT+8)", never "Asia/Kuala_Lumpur".
+            get timezoneLabel() {
+              var zone = this.guestTimezone;
+              var city = zone.split('/').pop().replace(/_/g, ' ');
+              var mins = -new Date().getTimezoneOffset();
+              if (mins === 0) return city + ' (GMT)';
+              var sign = mins < 0 ? '-' : '+';
+              var abs = Math.abs(mins);
+              var rest = abs % 60;
+              return city + ' (GMT' + sign + Math.floor(abs / 60) +
+                (rest ? ':' + String(rest).padStart(2, '0') : '') + ')';
+            },
             today: new Date().toISOString().slice(0, 10),
             date: new Date().toISOString().slice(0, 10),
             slots: [], loading: true, step: 'slot', selected: null,
@@ -279,10 +293,124 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
   });
 }
 
+/** Shown when a guest follows their signed link. Cancelling is a POST from here. */
+export function cancelConfirmPage(
+  host: PublicUser,
+  eventType: EventTypeRow,
+  booking: BookingRow,
+  token: string,
+): string {
+  const when = formatBookingWhen(booking);
+
+  return layout({
+    title: "Cancel booking",
+    nav: "public",
+    width: "md",
+    body: `
+      <div class="mx-auto max-w-md ui-rise">
+        <div class="ui-card ui-card-pad">
+          <h1 class="text-lg font-semibold tracking-[-0.02em] text-ink">Cancel this booking?</h1>
+          <p class="mt-1.5 text-[0.8125rem] text-muted">
+            This frees the slot for someone else. It cannot be undone — you would need to book again.
+          </p>
+
+          <dl class="ui-divide mt-5 border-t border-line">
+            ${detailRow("Event", escapeHtml(eventType.name))}
+            ${detailRow("Host", escapeHtml(host.name))}
+            ${detailRow("When", `<span class="ui-time">${escapeHtml(when.date)}</span>`)}
+            ${detailRow("Time", `<span class="ui-time font-medium">${escapeHtml(when.time)}</span>`)}
+            ${detailRow("Timezone", escapeHtml(when.zone))}
+          </dl>
+
+          <div class="mt-6 flex flex-wrap items-center gap-2">
+            <form method="post" action="/booking/${booking.id}/cancel">
+              <input type="hidden" name="token" value="${escapeHtml(token)}">
+              ${button({ label: "Cancel booking", variant: "danger" })}
+            </form>
+            ${button({
+              label: "Keep it",
+              href: `/${escapeHtml(host.slug)}`,
+              variant: "ghost",
+            })}
+          </div>
+        </div>
+      </div>`,
+  });
+}
+
+/** Terminal page after a guest cancels, and for an already-cancelled booking. */
+export function cancelledPage(host: PublicUser, eventType: EventTypeRow): string {
+  return layout({
+    title: "Booking cancelled",
+    nav: "public",
+    width: "md",
+    body: `
+      <div class="mx-auto max-w-md ui-rise text-center">
+        <div class="ui-card ui-card-pad">
+          <span class="mx-auto flex size-11 items-center justify-center rounded-full bg-subtle text-muted">
+            ${icon("x", "size-5")}
+          </span>
+          <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">Booking cancelled</h1>
+          <p class="mt-1.5 text-[0.8125rem] text-muted">
+            ${escapeHtml(eventType.name)} with ${escapeHtml(host.name)} has been cancelled.
+            ${escapeHtml(host.name)} has been notified.
+          </p>
+          <div class="mt-6">
+            ${button({
+              label: `Book another time with ${host.name}`,
+              href: `/${escapeHtml(host.slug)}`,
+              variant: "secondary",
+              size: "sm",
+            })}
+          </div>
+        </div>
+      </div>`,
+  });
+}
+
+/** Shown when a cancellation link is invalid, or the meeting already happened. */
+export function cancelUnavailablePage(message: string): string {
+  return layout({
+    title: "Cannot cancel",
+    nav: "public",
+    width: "md",
+    body: `
+      <div class="mx-auto max-w-md ui-rise text-center">
+        <div class="ui-card ui-card-pad">
+          <span class="mx-auto flex size-11 items-center justify-center rounded-full bg-warning-soft text-warning">
+            ${icon("alert", "size-5")}
+          </span>
+          <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">Cannot cancel</h1>
+          <p class="mt-1.5 text-[0.8125rem] text-muted">${escapeHtml(message)}</p>
+        </div>
+      </div>`,
+  });
+}
+
+function detailRow(label: string, valueHtml: string): string {
+  return `<div class="flex items-baseline justify-between gap-4 py-2.5">
+      <dt class="text-[0.8125rem] text-muted">${escapeHtml(label)}</dt>
+      <dd class="text-right text-sm text-ink">${valueHtml}</dd>
+    </div>`;
+}
+
+function formatBookingWhen(booking: BookingRow): { date: string; time: string; zone: string } {
+  const p = utcToZonedParts(new Date(booking.start_at), booking.timezone);
+  const e = utcToZonedParts(new Date(booking.end_at), booking.timezone);
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const weekday = DAY_NAMES[new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay()]!;
+  return {
+    date: `${weekday}, ${p.day} ${MONTHS[p.month - 1]} ${p.year}`,
+    time: `${pad2(p.hour)}:${pad2(p.minute)} – ${pad2(e.hour)}:${pad2(e.minute)}`,
+    zone: zoneDisplay(booking.timezone),
+  };
+}
+
 export function confirmationPage(
   host: PublicUser,
   eventType: EventTypeRow,
   booking: BookingRow,
+  cancelHref?: string,
 ): string {
   const p = utcToZonedParts(new Date(booking.start_at), booking.timezone);
   const end = utcToZonedParts(new Date(booking.end_at), booking.timezone);
@@ -317,25 +445,30 @@ export function confirmationPage(
           <dl class="ui-divide px-5 py-1 sm:px-6">
             ${row("Date", `<span class="ui-time">${escapeHtml(dateLine)}</span>`)}
             ${row("Time", `<span class="ui-time font-medium">${escapeHtml(timeLine)}</span>`)}
-            ${row("Timezone", `<span class="ui-time">${escapeHtml(booking.timezone)}</span>`)}
+            ${row("Timezone", escapeHtml(zoneDisplay(booking.timezone)))}
             ${row("Duration", `<span class="ui-time">${eventType.duration_minutes} min</span>`)}
             ${row("Status", badge("success", "Confirmed"))}
           </dl>
 
           <div class="border-t border-line bg-subtle/60 px-5 py-4 sm:px-6">
             <p class="text-[0.8125rem] text-muted">
-              Email confirmations are not sent yet — please note the time down.
+              A confirmation has been sent to ${escapeHtml(booking.guest_email)}.
             </p>
           </div>
         </div>
 
-        <div class="mt-4 flex justify-center">
+        <div class="mt-4 flex flex-wrap justify-center gap-2">
           ${button({
             label: `Book another with ${host.name}`,
             href: `/${host.slug}`,
             variant: "secondary",
             size: "sm",
           })}
+          ${
+            cancelHref
+              ? button({ label: "Cancel booking", href: cancelHref, variant: "ghost", size: "sm" })
+              : ""
+          }
         </div>
       </div>`,
   });

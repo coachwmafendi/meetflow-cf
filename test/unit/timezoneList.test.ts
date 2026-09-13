@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatUtcOffset, zoneCity, zoneLabel } from "../../src/lib/timezoneList";
+import { formatUtcOffset, zoneCity, zoneDisplay, zoneLabel } from "../../src/lib/timezoneList";
 
 describe("formatUtcOffset", () => {
   it("pads and signs", () => {
@@ -65,5 +65,34 @@ describe("zone list assumptions", () => {
 
   it("does not include UTC, which is why the client script adds it", () => {
     expect(zones).not.toContain("UTC");
+  });
+});
+
+describe("zoneDisplay", () => {
+  it("names a zone the way a person would read it", () => {
+    const at = new Date("2026-09-14T00:00:00Z");
+    expect(zoneDisplay("Asia/Kuala_Lumpur", at)).toBe("Kuala Lumpur (GMT+8)");
+    expect(zoneDisplay("America/New_York", at)).toBe("New York (GMT-4)");
+    expect(zoneDisplay("UTC", at)).toBe("UTC (GMT)");
+  });
+
+  it("never leaks the raw IANA identifier", () => {
+    const at = new Date("2026-09-14T00:00:00Z");
+    for (const zone of ["Asia/Kuala_Lumpur", "America/Argentina/Buenos_Aires", "Europe/London"]) {
+      const shown = zoneDisplay(zone, at);
+      expect(shown).not.toContain("_");
+      expect(shown).not.toContain("/");
+    }
+  });
+
+  it("keeps half-hour offsets readable", () => {
+    const at = new Date("2026-09-14T00:00:00Z");
+    expect(zoneDisplay("Asia/Kolkata", at)).toBe("Kolkata (GMT+5:30)");
+    expect(zoneDisplay("Asia/Kathmandu", at)).toBe("Kathmandu (GMT+5:45)");
+  });
+
+  it("follows DST", () => {
+    expect(zoneDisplay("Europe/London", new Date("2026-07-01T12:00:00Z"))).toBe("London (GMT+1)");
+    expect(zoneDisplay("Europe/London", new Date("2026-01-01T12:00:00Z"))).toBe("London (GMT)");
   });
 });

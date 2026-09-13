@@ -107,6 +107,17 @@ Two things must be set before real mail flows:
    at that domain. The default (`onboarding@resend.dev`) only delivers to your own Resend
    account address.
 
+## Guest cancellation
+
+Guest-facing emails and the confirmation page carry a signed cancellation link. There is no
+guest account, so the token _is_ the authorisation: an HMAC over the booking id, signed under
+its own purpose string so it can never be replayed as a session cookie, and checked against the
+id in the path so a valid token cannot be pointed at a different booking.
+
+Following the link is a **GET that only renders a confirmation page** — mail scanners and link
+prefetchers follow GETs and would otherwise cancel meetings silently. The cancellation itself is
+a POST. Cancelling is idempotent, refuses meetings that already happened, and notifies the host.
+
 ## Layout
 
 - `src/lib/` — pure, dependency-free logic (time, timezone, slots, crypto, validation)

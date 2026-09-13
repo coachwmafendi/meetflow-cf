@@ -63,7 +63,7 @@ describe("email jobs", () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]!.to).toEqual(["ahmad@example.com"]);
     expect(sent[0]!.subject).toBe("Confirmed: Consultation with wan");
-    expect(sent[0]!.text).toContain("09:00–09:30 (Asia/Kuala_Lumpur)");
+    expect(sent[0]!.text).toContain("09:00–09:30 · Kuala Lumpur (GMT+8)");
     expect(sent[0]!.text).toContain("Discuss ads");
   });
 
@@ -123,6 +123,48 @@ describe("email jobs", () => {
     const after = mailbox();
     expect((await processEmailJob(mailEnv as never, job, after.impl)).status).toBe("sent");
     expect(after.sent[0]!.subject).toBe("Cancelled: Consultation with wan");
+  });
+
+  it("puts a signed cancel link in the guest confirmation", async () => {
+    const { bookingId } = await seedBooking();
+    const { sent, impl } = mailbox();
+
+    await processEmailJob(
+      mailEnv as never,
+      { kind: "booking_confirmed", bookingId, to: "guest" },
+      impl,
+    );
+
+    expect(sent[0]!.text).toContain(`/booking/${bookingId}/cancel?token=`);
+  });
+
+  it("does not put a cancel link in host mail", async () => {
+    const { bookingId } = await seedBooking();
+    const { sent, impl } = mailbox();
+
+    await processEmailJob(
+      mailEnv as never,
+      { kind: "booking_confirmed", bookingId, to: "host" },
+      impl,
+    );
+
+    expect(sent[0]!.text).not.toContain("/cancel?token=");
+  });
+
+  it("tells the host when the guest cancels", async () => {
+    const { host, bookingId } = await seedBooking();
+    await api(`/api/bookings/${bookingId}/cancel`, { method: "POST", cookie: host.cookie });
+
+    const { sent, impl } = mailbox();
+    const outcome = await processEmailJob(
+      mailEnv as never,
+      { kind: "booking_cancelled", bookingId, to: "host" },
+      impl,
+    );
+
+    expect(outcome.status).toBe("sent");
+    expect(sent[0]!.to).toEqual(["wan@example.com"]);
+    expect(sent[0]!.subject).toBe("Cancelled: Ahmad — Consultation");
   });
 
   it("skips a deleted booking instead of throwing", async () => {

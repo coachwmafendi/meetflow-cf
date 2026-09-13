@@ -46,6 +46,11 @@ export const LIMITS = {
   register: { bucket: "register", limit: 5, periodSeconds: 3600 },
   /** Authenticated, but each upload writes up to 2MB to R2. */
   avatar: { bucket: "avatar", limit: 20, periodSeconds: 3600 },
+  /**
+   * Unauthenticated: the signed link is the only credential, so cap how fast
+   * tokens can be tried even though forging one requires the secret.
+   */
+  guestCancel: { bucket: "guest-cancel", limit: 20, periodSeconds: 60 },
 } as const satisfies Record<string, { bucket: string; limit: number; periodSeconds: number }>;
 
 /** Bucket names the overrides map is allowed to mention. */

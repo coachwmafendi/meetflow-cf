@@ -115,6 +115,25 @@ export async function cancelBooking(
     .first<BookingRow>();
 }
 
+/**
+ * Cancels by id alone, for signed guest links. Ownership is proven by the token
+ * before this is called; the status guard keeps it idempotent.
+ */
+export async function cancelBookingById(
+  db: D1Database,
+  id: number,
+  now: string,
+): Promise<BookingRow | null> {
+  return db
+    .prepare(
+      `UPDATE bookings SET status = 'cancelled', updated_at = ?
+       WHERE id = ? AND status = 'confirmed'
+       RETURNING *`,
+    )
+    .bind(now, id)
+    .first<BookingRow>();
+}
+
 export interface BookingWithEvent extends BookingRow {
   event_name: string;
 }

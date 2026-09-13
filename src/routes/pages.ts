@@ -14,6 +14,7 @@ import {
 } from "../db/eventTypes";
 import { findUserById, findUserBySlug, setAvatarKey, updateUserSettings } from "../db/users";
 import { ImageError, avatarKey, validateAvatar } from "../lib/image";
+import { cancelPath } from "../lib/cancelToken";
 import { toMinutes } from "../lib/slots";
 import { isoUtc, nowIso } from "../lib/time";
 import { isValidTimeZone, zonedDateString, zonedToUtc } from "../lib/timezone";
@@ -21,7 +22,12 @@ import { isEventSlug, isHhmm } from "../lib/validate";
 import { clearSession, issueSession } from "../middleware/auth";
 import { LIMITS, rateLimit } from "../middleware/rateLimit";
 import { AuthError, login, register } from "../services/auth";
-import { BookingError, cancelOwnedBooking } from "../services/booking";
+import {
+  BookingError,
+  cancelBookingByToken,
+  cancelOwnedBooking,
+  resolveCancelToken,
+} from "../services/booking";
 import { queueBookingCancelled } from "../services/email";
 import { loginPage, registerPage } from "../views/auth";
 import {
@@ -32,7 +38,14 @@ import {
   eventTypesPage,
   settingsPage,
 } from "../views/dashboard";
-import { bookingPage, confirmationPage, profilePage } from "../views/publicBooking";
+import {
+  bookingPage,
+  cancelConfirmPage,
+  cancelUnavailablePage,
+  cancelledPage,
+  confirmationPage,
+  profilePage,
+} from "../views/publicBooking";
 import type { AppEnv } from "../types";
 
 export const pageRoutes = new Hono<AppEnv>();
@@ -364,13 +377,61 @@ pageRoutes.get("/avatars/:userId/:file", async (c) => {
   return new Response(object.body, { headers });
 });
 
+/**
+ * Guest cancellation via signed link.
+ *
+ * GET only *shows* the confirmation — mail scanners and link prefetchers follow
+ * GETs, and would otherwise silently cancel people's meetings. The cancellation
+ * itself is the POST below.
+ */
+pageRoutes.get("/booking/:id/cancel", rateLimit(LIMITS.guestCancel), async (c) => {
+  const token = c.req.query("token") ?? "";
+  try {
+    const { booking, host, eventType } = await resolveCancelToken(
+      c.env.DB,
+      Number(c.req.param("id")),
+      token,
+      c.env.SESSION_SECRET,
+    );
+    if (booking.status === "cancelled") return html(cancelledPage(host, eventType));
+    if (Date.parse(booking.end_at) <= Date.now()) {
+      return html(cancelUnavailablePage("This meeting has already taken place."), 409);
+    }
+    return html(cancelConfirmPage(host, eventType, booking, token));
+  } catch (err) {
+    if (err instanceof BookingError) return html(cancelUnavailablePage(err.message), err.status);
+    throw err;
+  }
+});
+
+pageRoutes.post("/booking/:id/cancel", rateLimit(LIMITS.guestCancel), async (c) => {
+  const form = await c.req.parseBody();
+  const token = String(form.token ?? "");
+  try {
+    const { booking, host, eventType } = await cancelBookingByToken(
+      c.env.DB,
+      Number(c.req.param("id")),
+      token,
+      c.env.SESSION_SECRET,
+    );
+    // The guest already knows; the host is the one who needs telling.
+    c.executionCtx.waitUntil(queueBookingCancelled(c.env, booking.id, "guest"));
+    return html(cancelledPage(host, eventType));
+  } catch (err) {
+    if (err instanceof BookingError) return html(cancelUnavailablePage(err.message), err.status);
+    throw err;
+  }
+});
+
 pageRoutes.get("/booking/:id/confirmed", async (c) => {
   const booking = await getBookingById(c.env.DB, Number(c.req.param("id")));
   if (!booking) return notFound();
   const host = await findUserById(c.env.DB, booking.user_id);
   const eventType = await getEventTypeById(c.env.DB, booking.event_type_id);
   if (!host || !eventType) return notFound();
-  return html(confirmationPage(host, eventType, booking));
+  const href =
+    booking.status === "confirmed" ? await cancelPath(booking.id, c.env.SESSION_SECRET) : undefined;
+  return html(confirmationPage(host, eventType, booking, href));
 });
 
 pageRoutes.get("/:username", async (c) => {

@@ -25,12 +25,12 @@ const ctx: BookingEmailContext = {
 describe("formatWhen", () => {
   it("renders the local day and range", () => {
     expect(formatWhen(ctx.startAt, ctx.endAt, "Asia/Kuala_Lumpur")).toBe(
-      "Monday, 14 September 2026 · 09:00–09:30 (Asia/Kuala_Lumpur)",
+      "Monday, 14 September 2026 · 09:00–09:30 · Kuala Lumpur (GMT+8)",
     );
   });
 
   it("renders the same instant differently per timezone", () => {
-    expect(formatWhen(ctx.startAt, ctx.endAt, "UTC")).toContain("01:00–01:30 (UTC)");
+    expect(formatWhen(ctx.startAt, ctx.endAt, "UTC")).toContain("01:00–01:30 · UTC (GMT)");
     expect(formatWhen(ctx.startAt, ctx.endAt, "America/New_York")).toContain("21:00–21:30");
   });
 
@@ -52,7 +52,7 @@ describe("guestConfirmation", () => {
 
   it("shows the time in the guest's own timezone", () => {
     const mail = guestConfirmation(ctx, "America/New_York");
-    expect(mail.text).toContain("21:00–21:30 (America/New_York)");
+    expect(mail.text).toContain("21:00–21:30 · New York (GMT-4)");
   });
 
   it("ships both html and plain text", () => {
@@ -74,7 +74,7 @@ describe("hostNotification", () => {
     expect(mail.to).toBe("wan@example.com");
     expect(mail.replyTo).toBe("ahmad@example.com");
     expect(mail.subject).toBe("New booking: Ahmad — Consultation");
-    expect(mail.text).toContain("09:00–09:30 (Asia/Kuala_Lumpur)");
+    expect(mail.text).toContain("09:00–09:30 · Kuala Lumpur (GMT+8)");
     expect(mail.text).toContain("ahmad@example.com");
   });
 });

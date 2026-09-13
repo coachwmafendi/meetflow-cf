@@ -1,9 +1,16 @@
-import { getPublicEventType } from "../db/eventTypes";
-import { cancelBooking, getBookingOwned, insertBookingIfFree } from "../db/bookings";
-import { findUserBySlug } from "../db/users";
+import { getEventTypeById, getPublicEventType } from "../db/eventTypes";
+import {
+  cancelBooking,
+  cancelBookingById,
+  getBookingById,
+  getBookingOwned,
+  insertBookingIfFree,
+} from "../db/bookings";
+import { findUserById, findUserBySlug } from "../db/users";
 import { addMinutes, isoUtc, nowIso, parseIsoUtc } from "../lib/time";
 import { isValidTimeZone, zonedDateString } from "../lib/timezone";
 import { isEmail, isYmd } from "../lib/validate";
+import { verifyCancelToken } from "../lib/cancelToken";
 import { getDaySlots } from "./availability";
 import type { BookingRow, EventTypeRow, PublicUser } from "../types";
 
@@ -108,6 +115,66 @@ export async function createBooking(
   });
   if (!booking) throw new BookingError("This time slot is no longer available.", 409);
   return booking;
+}
+
+export interface GuestCancellable {
+  booking: BookingRow;
+  host: PublicUser;
+  eventType: EventTypeRow;
+}
+
+/**
+ * Resolves a signed guest cancellation link to the booking it authorises.
+ *
+ * Used by both the confirmation page and the cancel action, so an invalid token
+ * is rejected identically whether it is being viewed or acted on.
+ */
+export async function resolveCancelToken(
+  db: D1Database,
+  bookingId: number,
+  token: string,
+  secret: string,
+): Promise<GuestCancellable> {
+  const signedFor = await verifyCancelToken(token, secret);
+  // The id in the path must match the one inside the signature, so a valid
+  // token for one booking cannot be pointed at another.
+  if (signedFor === null || signedFor !== bookingId) {
+    throw new BookingError("This cancellation link is not valid.", 404);
+  }
+
+  const booking = await getBookingById(db, bookingId);
+  if (!booking) throw new BookingError("This cancellation link is not valid.", 404);
+
+  const [host, eventType] = await Promise.all([
+    findUserById(db, booking.user_id),
+    getEventTypeById(db, booking.event_type_id),
+  ]);
+  if (!host || !eventType) throw new BookingError("This cancellation link is not valid.", 404);
+
+  return { booking, host, eventType };
+}
+
+/** Cancels via a signed link. Idempotent, and refuses meetings already past. */
+export async function cancelBookingByToken(
+  db: D1Database,
+  bookingId: number,
+  token: string,
+  secret: string,
+  nowMs: number = Date.now(),
+): Promise<GuestCancellable> {
+  const resolved = await resolveCancelToken(db, bookingId, token, secret);
+
+  if (resolved.booking.status === "cancelled") return resolved;
+  if (resolved.booking.status !== "confirmed") {
+    throw new BookingError("This booking can no longer be cancelled.", 409);
+  }
+  if (Date.parse(resolved.booking.end_at) <= nowMs) {
+    throw new BookingError("This meeting has already taken place.", 409);
+  }
+
+  const cancelled = await cancelBookingById(db, bookingId, nowIso());
+  // Lost a race with the host cancelling: the end state is the same either way.
+  return { ...resolved, booking: cancelled ?? resolved.booking };
 }
 
 export async function cancelOwnedBooking(
