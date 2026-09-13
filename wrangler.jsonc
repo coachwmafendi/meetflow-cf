@@ -11,7 +11,7 @@
     {
       "binding": "DB",
       "database_name": "meetflow-db",
-      "database_id": "local-dev-placeholder",
+      "database_id": "9cbf498e-2813-42ab-a98a-8491107d5d3b",
       "migrations_dir": "migrations"
     }
   ],
