@@ -124,6 +124,8 @@ describe("GET /api/public/:username/:eventSlug/month", () => {
   it("returns bookable days for the requested month", async () => {
     await seed();
     // Mondays in March 2027 (Mar 1 2027 is a Monday): 1, 8, 15, 22, 29.
+    // 2027-03 stays ahead of the real clock the route uses (Date.now()), so
+    // past-day truncation never kicks in. Re-pick a future month if this ages out.
     const res = await SELF.fetch(
       "https://example.com/api/public/wan/consultation/month?year=2027&month=3",
     );
