@@ -40,11 +40,11 @@ drives the time list.
 
 One card, three columns (cal.com's proportions):
 
-| Column | Width | Content |
-|---|---|---|
-| Left rail | ~17rem | Avatar → host name (links to `/:slug`), event title, `30m` duration chip, timezone `<select>` |
-| Middle | flexible | Month calendar |
-| Right | ~15rem | Selected-day header, 12h/24h toggle, vertical time list |
+| Column    | Width    | Content                                                                                       |
+| --------- | -------- | --------------------------------------------------------------------------------------------- |
+| Left rail | ~17rem   | Avatar → host name (links to `/:slug`), event title, `30m` duration chip, timezone `<select>` |
+| Middle    | flexible | Month calendar                                                                                |
+| Right     | ~15rem   | Selected-day header, 12h/24h toggle, vertical time list                                       |
 
 - **Timezone select** is the guest's timezone (autodetect to browser zone). It is
   functional: changing it re-renders time labels in that zone and is submitted
@@ -138,13 +138,13 @@ current sticky top header:
 Each item: icon + label, rounded, `ui-nav-link` styling reused, active item
 filled (`ui-nav-link-active` + icon emphasized).
 
-| Item | Icon (SVG, new or existing) |
-|---|---|
-| Dashboard | grid (new 4-square icon) |
-| Event Types | `layers` (existing) |
-| Availability | `clock` (existing) |
-| Bookings | `calendar` (existing) |
-| Settings | `settings` (existing) |
+| Item         | Icon (SVG, new or existing) |
+| ------------ | --------------------------- |
+| Dashboard    | grid (new 4-square icon)    |
+| Event Types  | `layers` (existing)         |
+| Availability | `clock` (existing)          |
+| Bookings     | `calendar` (existing)       |
+| Settings     | `settings` (existing)       |
 
 Bottom block: existing theme toggle button, avatar + host name (non-link,
 display only), sign-out button (`logOut` icon, label "Sign out").
