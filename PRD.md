@@ -97,6 +97,7 @@ No Cloudflare Pages project is required.
 - Workers
 - D1
 - Workers Assets
+- Rate Limiting binding (guards the public booking endpoint)
 
 #### Add when needed
 
@@ -104,7 +105,6 @@ No Cloudflare Pages project is required.
 - R2
 - Queues
 - Cron Triggers
-- Rate Limiting binding
 
 The MVP should not add Cloudflare services simply for the sake of using them.
 
@@ -664,6 +664,11 @@ The application must:
 - Prevent manipulation of booking timestamps
 - Use server-generated IDs
 - Rate-limit public endpoints when practical
+
+`POST /api/public/:username/:eventSlug/book` is rate limited to 10 requests per minute per
+client IP via the Workers Rate Limiting binding, keyed on `CF-Connecting-IP` (edge-set, so a
+client cannot spoof it). Over the limit returns `429` with `Retry-After: 60`. Counters are
+per-colo, so this is an abuse guard rather than an exact quota.
 
 A host must never be able to access another host's:
 

@@ -67,3 +67,8 @@ After changing bindings in `wrangler.jsonc`, re-run `npx wrangler types` to refr
   run on Workers. Sessions are stateless HMAC-signed cookies, so there is no `sessions` table.
 - **`422` vs `409`**: `422` means the time was never a valid slot; `409` means it was valid
   but is already taken, which is what makes the client refresh its slot list.
+- **Rate limiting**: `POST …/book` is capped at 10/min per client IP (`CF-Connecting-IP`,
+  edge-set and unspoofable) via the Workers Rate Limiting binding. Over the limit returns
+  `429` + `Retry-After`. Counters are per-colo, so treat it as an abuse guard, not a quota.
+  The middleware fails open if the binding is absent — losing rate limiting beats losing
+  the booking endpoint.
