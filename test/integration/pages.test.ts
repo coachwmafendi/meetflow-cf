@@ -51,6 +51,24 @@ describe("pages", () => {
     expect(html).toContain("data-timezone");
   });
 
+  it("renders open/copy actions on event type cards", async () => {
+    const host = await createHost("wan");
+    await SELF.fetch("https://example.com/api/event-types", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 30 }),
+    });
+    const res = await SELF.fetch("https://example.com/dashboard/event-types", {
+      headers: { cookie: host.cookie },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener"');
+    expect(html).toContain('data-copy="/wan/consultation"');
+    expect(html).toContain("Copy link");
+  });
+
   it("escapes host-controlled text", async () => {
     const host = await createHost("wan");
     await SELF.fetch("https://example.com/api/event-types", {

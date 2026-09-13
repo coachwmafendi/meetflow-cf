@@ -23,6 +23,47 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/**
+ * Copies the URL in a `data-copy` attribute when its button is clicked, then
+ * swaps the button content for a "Copied" state. Delegated: works for any
+ * button rendered anywhere on the page. Clipboard API with an execCommand
+ * fallback for older browsers.
+ */
+const COPY_LINK_SCRIPT = `
+  <script>
+    (function () {
+      document.addEventListener("click", function (event) {
+        var btn = event.target.closest("[data-copy]");
+        if (!btn) return;
+        var url = new URL(btn.getAttribute("data-copy"), window.location.origin).href;
+
+        function done() {
+          var original = btn.innerHTML;
+          btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="size-4"><path d="m4.5 12.5 5 5 10-11"/></svg><span>Copied</span>';
+          window.setTimeout(function () { btn.innerHTML = original; }, 1600);
+        }
+
+        function fallback() {
+          var ta = document.createElement("textarea");
+          ta.value = url;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand("copy"); } catch (e) {}
+          document.body.removeChild(ta);
+          done();
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(done, fallback);
+        } else {
+          fallback();
+        }
+      });
+    })();
+  </script>`;
+
 /** "Mon 14 Sep · 09:00" — weekday first, because hosts scan by day. */
 function whenParts(iso: string, timeZone: string): { day: string; clock: string } {
   const p = utcToZonedParts(new Date(iso), timeZone);
@@ -139,7 +180,14 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[]): st
           <p class="mt-2.5 truncate font-mono text-[0.75rem] text-muted">${escapeHtml(path)}</p>
         </div>
         <div class="flex shrink-0 items-center gap-2">
-          ${button({ label: "Preview", href: path, variant: "ghost", size: "sm", icon: "link" })}
+          <a class="ui-btn ui-btn-ghost ui-btn-sm" href="${escapeHtml(path)}"
+             target="_blank" rel="noopener">
+            ${icon("external", "size-4")}<span>Open</span>
+          </a>
+          <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm"
+                  data-copy="${escapeHtml(path)}" aria-label="Copy link">
+            ${icon("copy", "size-4")}<span>Copy link</span>
+          </button>
           ${button({
             label: "Edit",
             href: `/dashboard/event-types/${e.id}`,
@@ -202,7 +250,8 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[]): st
             ${button({ label: "Create event type", variant: "primary", icon: "plus" })}
           </div>
         </form>
-      </section>`,
+      </section>
+      ${COPY_LINK_SCRIPT}`,
   });
 }
 
@@ -573,13 +622,10 @@ export function settingsPage(user: PublicUser, error?: string): string {
             Your username is permanent for now — existing booking links depend on it.
           </p>
           <div class="mt-4">
-            ${button({
-              label: "Open",
-              href: `/${user.slug}`,
-              variant: "secondary",
-              size: "sm",
-              icon: "globe",
-            })}
+            <a class="ui-btn ui-btn-secondary ui-btn-sm" href="/${escapeHtml(user.slug)}"
+               target="_blank" rel="noopener">
+              ${icon("external", "size-4")}<span>Open</span>
+            </a>
           </div>
         </aside>
       </div>
