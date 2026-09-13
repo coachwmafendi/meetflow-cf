@@ -668,11 +668,11 @@ The application must:
 Unauthenticated endpoints are rate limited per client IP, keyed on `CF-Connecting-IP`
 (edge-set, so a client cannot spoof it). Over the limit returns `429` with `Retry-After`.
 
-| Action | Limit | Endpoints sharing the counter |
-|---|---|---|
-| Book | 10 / minute | `POST /api/public/:username/:eventSlug/book` |
-| Log in | 10 / minute | `POST /api/auth/login`, `POST /login` |
-| Register | 5 / hour | `POST /api/auth/register`, `POST /register` |
+| Action   | Limit       | Endpoints sharing the counter                |
+| -------- | ----------- | -------------------------------------------- |
+| Book     | 10 / minute | `POST /api/public/:username/:eventSlug/book` |
+| Log in   | 10 / minute | `POST /api/auth/login`, `POST /login`        |
+| Register | 5 / hour    | `POST /api/auth/register`, `POST /register`  |
 
 The JSON API and the HTML form for one action **must** share a bucket, otherwise an attacker
 doubles their budget by alternating entry points.

@@ -8,7 +8,13 @@ import {
   updateEventType,
 } from "../db/eventTypes";
 import { nowIso } from "../lib/time";
-import { ValidationError, isEventSlug, optionalString, requireInt, requireString } from "../lib/validate";
+import {
+  ValidationError,
+  isEventSlug,
+  optionalString,
+  requireInt,
+  requireString,
+} from "../lib/validate";
 import { requireAuth } from "../middleware/auth";
 import type { AppEnv } from "../types";
 
@@ -23,7 +29,9 @@ eventTypeRoutes.get("/", async (c) => {
 
 eventTypeRoutes.post("/", async (c) => {
   const user = c.get("user");
-  const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+  const body = await c.req
+    .json<Record<string, unknown>>()
+    .catch(() => ({}) as Record<string, unknown>);
   try {
     const name = requireString(body, "name", { max: 100 });
     const slug = requireString(body, "slug", { max: 60 }).toLowerCase();
@@ -43,7 +51,8 @@ eventTypeRoutes.post("/", async (c) => {
     });
     return c.json({ eventType }, 201);
   } catch (err) {
-    if (err instanceof ValidationError) return c.json({ error: err.message, field: err.field }, 400);
+    if (err instanceof ValidationError)
+      return c.json({ error: err.message, field: err.field }, 400);
     if (String(err).includes("UNIQUE")) {
       return c.json({ error: "You already have an event type with that URL" }, 409);
     }
@@ -63,7 +72,9 @@ eventTypeRoutes.patch("/:id", async (c) => {
   const current = await getEventTypeOwned(c.env.DB, id, user.id);
   if (!current) return c.json({ error: "Not found" }, 404);
 
-  const body = await c.req.json<Record<string, unknown>>().catch(() => ({}) as Record<string, unknown>);
+  const body = await c.req
+    .json<Record<string, unknown>>()
+    .catch(() => ({}) as Record<string, unknown>);
   try {
     const merged = {
       name: body.name === undefined ? current.name : requireString(body, "name", { max: 100 }),
@@ -89,7 +100,8 @@ eventTypeRoutes.patch("/:id", async (c) => {
     if (!eventType) return c.json({ error: "Not found" }, 404);
     return c.json({ eventType });
   } catch (err) {
-    if (err instanceof ValidationError) return c.json({ error: err.message, field: err.field }, 400);
+    if (err instanceof ValidationError)
+      return c.json({ error: err.message, field: err.field }, 400);
     if (String(err).includes("UNIQUE")) {
       return c.json({ error: "You already have an event type with that URL" }, 409);
     }

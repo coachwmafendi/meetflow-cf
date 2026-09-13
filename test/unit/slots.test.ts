@@ -3,13 +3,15 @@ import { generateSlotStarts, removeBusy, toMinutes } from "../../src/lib/slots";
 
 describe("generateSlotStarts", () => {
   it("fits whole events only (PRD §11)", () => {
-    expect(generateSlotStarts([{ start: toMinutes("09:00"), end: toMinutes("11:00") }], 30))
-      .toEqual([540, 570, 600, 630]); // 09:00 09:30 10:00 10:30
+    expect(
+      generateSlotStarts([{ start: toMinutes("09:00"), end: toMinutes("11:00") }], 30),
+    ).toEqual([540, 570, 600, 630]); // 09:00 09:30 10:00 10:30
   });
 
   it("drops a trailing partial window", () => {
-    expect(generateSlotStarts([{ start: toMinutes("09:00"), end: toMinutes("10:20") }], 30))
-      .toEqual([540, 570]); // 09:00 09:30 — 10:00 would end 10:30 > 10:20
+    expect(
+      generateSlotStarts([{ start: toMinutes("09:00"), end: toMinutes("10:20") }], 30),
+    ).toEqual([540, 570]); // 09:00 09:30 — 10:00 would end 10:30 > 10:20
   });
 
   it("handles two windows on one day", () => {

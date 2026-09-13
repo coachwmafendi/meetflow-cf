@@ -52,7 +52,11 @@ describe("auth rate limiting", () => {
   it("throttles repeated failed logins on the JSON API", async () => {
     const fetch = withLimit("3");
     const attempt = () =>
-      fetch("/api/auth/login", json({ email: "nobody@example.com", password: "wrong" }), "203.0.113.1");
+      fetch(
+        "/api/auth/login",
+        json({ email: "nobody@example.com", password: "wrong" }),
+        "203.0.113.1",
+      );
 
     expect((await attempt()).status).toBe(401);
     expect((await attempt()).status).toBe(401);

@@ -17,7 +17,13 @@ bookingRoutes.get("/stats", async (c) => {
   const dayStart = zonedToUtc(today, "00:00", user.timezone);
   const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
 
-  const stats = await dashboardStats(c.env.DB, user.id, isoUtc(now), isoUtc(dayStart), isoUtc(dayEnd));
+  const stats = await dashboardStats(
+    c.env.DB,
+    user.id,
+    isoUtc(now),
+    isoUtc(dayStart),
+    isoUtc(dayEnd),
+  );
   return c.json({ stats });
 });
 

@@ -24,7 +24,18 @@ npm test
 ```
 
 Tests run inside `workerd` with a real local D1 via `@cloudflare/vitest-pool-workers`.
-`npm run typecheck` runs `tsc --noEmit`.
+
+```bash
+npm run check
+```
+
+Runs `format:check`, `typecheck` and `test` together — the same three gates as CI would.
+`npm run format` rewrites files in place.
+
+Prettier is configured at `printWidth: 100`, chosen by measuring the existing code (p95 = 87
+columns) and comparing churn across widths — 80 rewrote 1036 lines, 100 rewrote 109.
+`wrangler.jsonc` is excluded from trailing commas so it stays readable by strict JSON parsers,
+and the generated `worker-configuration.d.ts` plus the plan documents are left alone entirely.
 
 ## Deploy
 
@@ -80,6 +91,6 @@ After changing bindings in `wrangler.jsonc`, re-run `npx wrangler types` to refr
   account — verified in production at `limit: 2, period: 60` with 8 sequential requests
   from one IP, all allowed. The `RateLimiter` DO keeps a fixed-window counter per
   `bucket:ip`; a DO handles one request at a time, so the read-modify-write is atomic
-  and the count is exact and global rather than per-colo. Being a *fixed* window, a caller
+  and the count is exact and global rather than per-colo. Being a _fixed_ window, a caller
   straddling a boundary can get up to 2× the limit across the two adjacent windows — fine
   for an abuse guard. Switch to a sliding window if that ever matters.

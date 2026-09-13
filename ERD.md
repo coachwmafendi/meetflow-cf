@@ -97,16 +97,16 @@ erDiagram
 
 Stores host accounts.
 
-| Column | Type | Required | Description |
-|---|---|---|---|
-| id | INTEGER | Yes | Primary key |
-| name | TEXT | Yes | Host name |
-| email | TEXT | Yes | Login email (stored lowercased) |
-| password_hash | TEXT | Yes | Secure password hash |
-| slug | TEXT | Yes | Public username |
-| timezone | TEXT | Yes | IANA timezone |
-| created_at | TEXT | Yes | Creation timestamp |
-| updated_at | TEXT | Yes | Last update timestamp |
+| Column        | Type    | Required | Description                     |
+| ------------- | ------- | -------- | ------------------------------- |
+| id            | INTEGER | Yes      | Primary key                     |
+| name          | TEXT    | Yes      | Host name                       |
+| email         | TEXT    | Yes      | Login email (stored lowercased) |
+| password_hash | TEXT    | Yes      | Secure password hash            |
+| slug          | TEXT    | Yes      | Public username                 |
+| timezone      | TEXT    | Yes      | IANA timezone                   |
+| created_at    | TEXT    | Yes      | Creation timestamp              |
+| updated_at    | TEXT    | Yes      | Last update timestamp           |
 
 Constraints:
 
@@ -144,17 +144,17 @@ Public profile:
 
 Defines meetings that the host offers.
 
-| Column | Type | Required | Description |
-|---|---|---|---|
-| id | INTEGER | Yes | Primary key |
-| user_id | INTEGER | Yes | Host |
-| name | TEXT | Yes | Event name |
-| slug | TEXT | Yes | Public URL slug |
-| description | TEXT | No | Event description |
-| duration_minutes | INTEGER | Yes | Meeting duration |
-| is_active | INTEGER | Yes | 1 = active, 0 = inactive |
-| created_at | TEXT | Yes | Creation timestamp |
-| updated_at | TEXT | Yes | Last update timestamp |
+| Column           | Type    | Required | Description              |
+| ---------------- | ------- | -------- | ------------------------ |
+| id               | INTEGER | Yes      | Primary key              |
+| user_id          | INTEGER | Yes      | Host                     |
+| name             | TEXT    | Yes      | Event name               |
+| slug             | TEXT    | Yes      | Public URL slug          |
+| description      | TEXT    | No       | Event description        |
+| duration_minutes | INTEGER | Yes      | Meeting duration         |
+| is_active        | INTEGER | Yes      | 1 = active, 0 = inactive |
+| created_at       | TEXT    | Yes      | Creation timestamp       |
+| updated_at       | TEXT    | Yes      | Last update timestamp    |
 
 Foreign key:
 
@@ -190,16 +190,16 @@ Public URL:
 
 Stores recurring weekly availability, expressed in the host's timezone.
 
-| Column | Type | Required | Description |
-|---|---|---|---|
-| id | INTEGER | Yes | Primary key |
-| user_id | INTEGER | Yes | Host |
-| day_of_week | INTEGER | Yes | 0–6 |
-| start_time | TEXT | Yes | HH:MM |
-| end_time | TEXT | Yes | HH:MM |
-| is_active | INTEGER | Yes | 1 = active |
-| created_at | TEXT | Yes | Creation timestamp |
-| updated_at | TEXT | Yes | Last update timestamp |
+| Column      | Type    | Required | Description           |
+| ----------- | ------- | -------- | --------------------- |
+| id          | INTEGER | Yes      | Primary key           |
+| user_id     | INTEGER | Yes      | Host                  |
+| day_of_week | INTEGER | Yes      | 0–6                   |
+| start_time  | TEXT    | Yes      | HH:MM                 |
+| end_time    | TEXT    | Yes      | HH:MM                 |
+| is_active   | INTEGER | Yes      | 1 = active            |
+| created_at  | TEXT    | Yes      | Creation timestamp    |
+| updated_at  | TEXT    | Yes      | Last update timestamp |
 
 Day mapping:
 
@@ -234,20 +234,20 @@ and `day_of_week BETWEEN 0 AND 6`.
 
 Stores appointments.
 
-| Column | Type | Required | Description |
-|---|---|---|---|
-| id | INTEGER | Yes | Primary key |
-| user_id | INTEGER | Yes | Host |
-| event_type_id | INTEGER | Yes | Event type |
-| guest_name | TEXT | Yes | Guest name |
-| guest_email | TEXT | Yes | Guest email |
-| start_at | TEXT | Yes | UTC start |
-| end_at | TEXT | Yes | UTC end |
-| timezone | TEXT | Yes | Guest/booking timezone |
-| status | TEXT | Yes | Booking status |
-| notes | TEXT | No | Guest notes |
-| created_at | TEXT | Yes | Creation timestamp |
-| updated_at | TEXT | Yes | Last update timestamp |
+| Column        | Type    | Required | Description            |
+| ------------- | ------- | -------- | ---------------------- |
+| id            | INTEGER | Yes      | Primary key            |
+| user_id       | INTEGER | Yes      | Host                   |
+| event_type_id | INTEGER | Yes      | Event type             |
+| guest_name    | TEXT    | Yes      | Guest name             |
+| guest_email   | TEXT    | Yes      | Guest email            |
+| start_at      | TEXT    | Yes      | UTC start              |
+| end_at        | TEXT    | Yes      | UTC end                |
+| timezone      | TEXT    | Yes      | Guest/booking timezone |
+| status        | TEXT    | Yes      | Booking status         |
+| notes         | TEXT    | No       | Guest notes            |
+| created_at    | TEXT    | Yes      | Creation timestamp     |
+| updated_at    | TEXT    | Yes      | Last update timestamp  |
 
 Foreign keys:
 

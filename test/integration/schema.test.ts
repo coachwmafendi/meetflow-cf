@@ -17,17 +17,23 @@ describe("schema", () => {
     await env.DB.prepare(
       `INSERT INTO users (id,name,email,password_hash,slug,timezone,created_at,updated_at)
        VALUES (900,'U','u900@example.com','x','u900','UTC',?,?)`,
-    ).bind(now, now).run();
+    )
+      .bind(now, now)
+      .run();
     await env.DB.prepare(
       `INSERT INTO event_types (id,user_id,name,slug,duration_minutes,is_active,created_at,updated_at)
        VALUES (900,900,'E','e',30,1,?,?)`,
-    ).bind(now, now).run();
+    )
+      .bind(now, now)
+      .run();
 
     const insert = (endAt: string) =>
       env.DB.prepare(
         `INSERT INTO bookings (user_id,event_type_id,guest_name,guest_email,start_at,end_at,timezone,status,created_at,updated_at)
          VALUES (900,900,'G','g@example.com','2026-10-01T01:00:00Z',?, 'UTC','confirmed',?,?)`,
-      ).bind(endAt, now, now).run();
+      )
+        .bind(endAt, now, now)
+        .run();
 
     await insert("2026-10-01T01:30:00Z");
     await expect(insert("2026-10-01T02:00:00Z")).rejects.toThrow();

@@ -60,7 +60,9 @@ describe("event types", () => {
     });
     const { eventType } = await created.json<{ eventType: { id: number } }>();
 
-    expect((await api(`/api/event-types/${eventType.id}`, { cookie: ali.cookie })).status).toBe(404);
+    expect((await api(`/api/event-types/${eventType.id}`, { cookie: ali.cookie })).status).toBe(
+      404,
+    );
     expect(
       (
         await api(`/api/event-types/${eventType.id}`, {

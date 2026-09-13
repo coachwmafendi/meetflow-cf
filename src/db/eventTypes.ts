@@ -19,10 +19,7 @@ export async function getEventTypeOwned(
     .first<EventTypeRow>();
 }
 
-export async function getEventTypeById(
-  db: D1Database,
-  id: number,
-): Promise<EventTypeRow | null> {
+export async function getEventTypeById(db: D1Database, id: number): Promise<EventTypeRow | null> {
   return db.prepare("SELECT * FROM event_types WHERE id = ?").bind(id).first<EventTypeRow>();
 }
 

@@ -66,10 +66,7 @@ describe("getSlotsForDate", () => {
       dateYmd: "2026-09-21",
       nowMs: Date.parse("2026-09-21T01:45:00Z"),
     });
-    expect(slots.map((s) => s.startAt)).toEqual([
-      "2026-09-21T02:00:00Z",
-      "2026-09-21T02:30:00Z",
-    ]);
+    expect(slots.map((s) => s.startAt)).toEqual(["2026-09-21T02:00:00Z", "2026-09-21T02:30:00Z"]);
   });
 
   it("hides slots taken by a confirmed booking", async () => {

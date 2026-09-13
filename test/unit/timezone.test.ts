@@ -20,22 +20,31 @@ describe("timezone", () => {
 
   it("converts a local wall time to UTC", () => {
     // 09:00 in Kuala Lumpur (UTC+8) == 01:00Z
-    expect(isoUtc(zonedToUtc("2026-09-21", "09:00", "Asia/Kuala_Lumpur")))
-      .toBe("2026-09-21T01:00:00Z");
+    expect(isoUtc(zonedToUtc("2026-09-21", "09:00", "Asia/Kuala_Lumpur"))).toBe(
+      "2026-09-21T01:00:00Z",
+    );
   });
 
   it("converts across a DST boundary in New York", () => {
     // 2026-03-08 is the US spring-forward date; 09:00 EDT == 13:00Z
-    expect(isoUtc(zonedToUtc("2026-03-08", "09:00", "America/New_York")))
-      .toBe("2026-03-08T13:00:00Z");
+    expect(isoUtc(zonedToUtc("2026-03-08", "09:00", "America/New_York"))).toBe(
+      "2026-03-08T13:00:00Z",
+    );
     // the day before is still EST; 09:00 EST == 14:00Z
-    expect(isoUtc(zonedToUtc("2026-03-07", "09:00", "America/New_York")))
-      .toBe("2026-03-07T14:00:00Z");
+    expect(isoUtc(zonedToUtc("2026-03-07", "09:00", "America/New_York"))).toBe(
+      "2026-03-07T14:00:00Z",
+    );
   });
 
   it("renders a UTC instant back into zoned parts", () => {
-    expect(utcToZonedParts(new Date("2026-09-21T01:00:00Z"), "Asia/Kuala_Lumpur"))
-      .toEqual({ year: 2026, month: 9, day: 21, hour: 9, minute: 0, second: 0 });
+    expect(utcToZonedParts(new Date("2026-09-21T01:00:00Z"), "Asia/Kuala_Lumpur")).toEqual({
+      year: 2026,
+      month: 9,
+      day: 21,
+      hour: 9,
+      minute: 0,
+      second: 0,
+    });
   });
 
   it("validates IANA identifiers", () => {

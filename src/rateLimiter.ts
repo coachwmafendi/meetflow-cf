@@ -31,8 +31,7 @@ export class RateLimiter extends DurableObject<Env> {
     const resetAt = start + periodMs;
 
     const stored = await this.ctx.storage.get<CounterWindow>(STORAGE_KEY);
-    const window: CounterWindow =
-      stored && stored.start === start ? stored : { start, count: 0 };
+    const window: CounterWindow = stored && stored.start === start ? stored : { start, count: 0 };
 
     if (window.count >= limit) {
       return { success: false, remaining: 0, resetAt };

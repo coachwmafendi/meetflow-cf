@@ -55,9 +55,8 @@ export const LIMITS = {
  */
 export function rateLimit({ bucket, limit, periodSeconds = 60, onLimited }: RateLimitOptions) {
   return createMiddleware<AppEnv>(async (c, next) => {
-    const namespace = c.env.RATE_LIMITER as DurableObjectNamespace<
-      import("../rateLimiter").RateLimiter
-    > | undefined;
+    const namespace = c.env.RATE_LIMITER as
+      DurableObjectNamespace<import("../rateLimiter").RateLimiter> | undefined;
 
     if (!namespace) {
       console.warn(`rateLimit: RATE_LIMITER binding missing, allowing ${bucket}`);
