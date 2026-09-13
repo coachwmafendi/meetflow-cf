@@ -1,6 +1,7 @@
 import { escapeHtml } from "./escape";
 
 export { escapeHtml } from "./escape";
+import { avatar, icon } from "./ui";
 
 export interface LayoutOptions {
   title: string;
@@ -10,6 +11,8 @@ export interface LayoutOptions {
   nav?: "host" | "public" | "none";
   activeNav?: string;
   hostName?: string;
+  /** R2 object key for the host's avatar, shown in the sidebar. */
+  hostAvatarKey?: string | null;
   /** Constrains <main>. Auth and booking screens are narrower than the dashboard. */
   width?: "sm" | "md" | "lg";
 }
@@ -82,11 +85,11 @@ function themeToggle(): string {
 }
 
 const HOST_NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/dashboard/event-types", label: "Event Types" },
-  { href: "/dashboard/availability", label: "Availability" },
-  { href: "/dashboard/bookings", label: "Bookings" },
-  { href: "/dashboard/settings", label: "Settings" },
+  { href: "/dashboard", label: "Dashboard", icon: "grid" },
+  { href: "/dashboard/event-types", label: "Event Types", icon: "layers" },
+  { href: "/dashboard/availability", label: "Availability", icon: "clock" },
+  { href: "/dashboard/bookings", label: "Bookings", icon: "calendar" },
+  { href: "/dashboard/settings", label: "Settings", icon: "settings" },
 ] as const;
 
 const WIDTHS = { sm: "max-w-md", md: "max-w-3xl", lg: "max-w-5xl" } as const;
@@ -106,37 +109,79 @@ function wordmark(href: string): string {
     </a>`;
 }
 
-function hostNav(active: string | undefined, hostName: string | undefined): string {
-  const links = HOST_NAV.map(
-    (item) =>
-      `<a href="${item.href}" class="ui-nav-link ${
-        active === item.href ? "ui-nav-link-active" : ""
-      }"${active === item.href ? ' aria-current="page"' : ""}>${item.label}</a>`,
-  ).join("");
+function hostLayout(options: LayoutOptions, dataScript: string): string {
+  const links = HOST_NAV.map((item) => {
+    const active = options.activeNav === item.href;
+    return `<a href="${item.href}" @click="drawer = false"
+        class="ui-side-link ${active ? "ui-side-link-active" : ""}"${
+          active ? ' aria-current="page"' : ""
+        }>
+      ${icon(item.icon, "size-[18px] shrink-0")}
+      <span class="truncate">${item.label}</span>
+    </a>`;
+  }).join("");
 
-  return `
-    <header class="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur-md">
-      <div class="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-5 sm:px-6">
+  return `<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  ${THEME_BOOTSTRAP}
+  <title>${escapeHtml(options.title)} · MeetFlow</title>
+  <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/app.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23222'/%3E%3Crect x='7' y='11' width='6' height='5' rx='1.5' fill='white'/%3E%3C/svg%3E">
+  <script defer src="/vendor/alpine.min.js"></script>
+</head>
+<body class="min-h-full bg-canvas text-body antialiased">
+  <div class="flex min-h-screen" x-data="{ drawer: false }">
+
+    <header class="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface/85 px-4 backdrop-blur-md lg:hidden">
+      ${wordmark("/dashboard")}
+      <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2"
+              @click="drawer = true" aria-label="Open menu" aria-controls="app-sidebar">
+        ${icon("menu", "size-5")}
+      </button>
+    </header>
+
+    <div x-show="drawer" x-cloak class="fixed inset-0 z-40 bg-ink/40 lg:hidden"
+         @click="drawer = false" aria-hidden="true"></div>
+
+    <aside id="app-sidebar" class="app-sidebar" :class="drawer ? 'drawer-open' : ''">
+      <div class="flex h-14 shrink-0 items-center border-b border-line px-4">
         ${wordmark("/dashboard")}
-        <nav class="hidden items-center gap-0.5 md:flex" aria-label="Main">${links}</nav>
-        <div class="flex items-center gap-1">
+      </div>
+
+      <nav class="flex-1 space-y-0.5 overflow-y-auto p-3" aria-label="Main">${links}</nav>
+
+      <div class="shrink-0 space-y-3 border-t border-line p-3">
+        <div class="flex items-center gap-2.5 px-1">
+          ${avatar(options.hostName ?? "You", options.hostAvatarKey ?? null, "size-8", "text-xs")}
+          <span class="min-w-0 truncate text-sm font-medium text-ink">${escapeHtml(
+            options.hostName ?? "",
+          )}</span>
+        </div>
+        <div class="flex items-center justify-between gap-1">
           ${themeToggle()}
           <form method="post" action="/logout">
-          <button class="ui-btn ui-btn-ghost ui-btn-sm" type="submit">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
-                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="size-4">
-              <path d="M9 21H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h3"/><path d="m16 17 5-5-5-5M21 12H9"/>
-            </svg>
-            <span class="hidden sm:inline">Sign out${
-              hostName ? ` ${escapeHtml(hostName)}` : ""
-            }</span>
-          </button>
+            <button class="ui-btn ui-btn-ghost ui-btn-sm" type="submit">
+              ${icon("logOut", "size-4")}
+              <span>Sign out</span>
+            </button>
           </form>
         </div>
       </div>
-      <nav class="flex gap-0.5 overflow-x-auto border-t border-line px-3 py-1.5 md:hidden"
-           aria-label="Main">${links}</nav>
-    </header>`;
+    </aside>
+
+    <div class="min-w-0 flex-1">
+      <main class="mx-auto w-full max-w-5xl px-5 pb-10 pt-20 sm:px-6 lg:pt-10">${options.body}</main>
+    </div>
+  </div>
+  ${dataScript}
+  ${THEME_TOGGLE_SCRIPT}
+</body>
+</html>`;
 }
 
 function publicHeader(): string {
@@ -153,12 +198,9 @@ export function layout(options: LayoutOptions): string {
       )}</script>`
     : "";
 
-  const header =
-    options.nav === "host"
-      ? hostNav(options.activeNav, options.hostName)
-      : options.nav === "public"
-        ? publicHeader()
-        : "";
+  if (options.nav === "host") return hostLayout(options, dataScript);
+
+  const header = options.nav === "public" ? publicHeader() : "";
 
   return `<!doctype html>
 <html lang="en" class="h-full">
@@ -179,7 +221,6 @@ export function layout(options: LayoutOptions): string {
     WIDTHS[options.width ?? "lg"]
   } flex-1 px-5 py-8 sm:px-6 sm:py-10">${options.body}</main>
   ${dataScript}
-  ${options.nav === "host" ? THEME_TOGGLE_SCRIPT : ""}
 </body>
 </html>`;
 }

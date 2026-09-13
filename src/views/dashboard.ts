@@ -65,6 +65,7 @@ export function dashboardPage(
     nav: "host",
     activeNav: "/dashboard",
     hostName: user.name,
+    hostAvatarKey: user.avatar_key,
     body: `
       ${pageHeader({
         eyebrow: "Overview",
@@ -163,6 +164,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[]): st
     nav: "host",
     activeNav: "/dashboard/event-types",
     hostName: user.name,
+    hostAvatarKey: user.avatar_key,
     body: `
       ${pageHeader({
         eyebrow: "Bookable meetings",
@@ -233,6 +235,7 @@ export function eventTypeEditPage(
     nav: "host",
     activeNav: "/dashboard/event-types",
     hostName: user.name,
+    hostAvatarKey: user.avatar_key,
     body: `
       <a href="/dashboard/event-types" class="ui-btn ui-btn-ghost ui-btn-sm -ml-2 mb-4">
         ${icon("arrowLeft", "size-4")}<span>Event types</span>
@@ -360,6 +363,7 @@ export function availabilityPage(user: PublicUser, rules: AvailabilityRuleRow[])
     nav: "host",
     activeNav: "/dashboard/availability",
     hostName: user.name,
+    hostAvatarKey: user.avatar_key,
     body: `
       ${pageHeader({
         eyebrow: "Weekly schedule",
@@ -470,6 +474,7 @@ export function bookingsPage(
     nav: "host",
     activeNav: "/dashboard/bookings",
     hostName: user.name,
+    hostAvatarKey: user.avatar_key,
     body: `
       ${pageHeader({
         eyebrow: "Your calendar",
@@ -509,6 +514,7 @@ export function settingsPage(user: PublicUser, error?: string): string {
     nav: "host",
     activeNav: "/dashboard/settings",
     hostName: user.name,
+    hostAvatarKey: user.avatar_key,
     body: `
       ${pageHeader({
         eyebrow: "Account",
