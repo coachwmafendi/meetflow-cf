@@ -191,6 +191,10 @@
     cursor: pointer;
   }
 
+  [x-cloak] {
+    display: none !important;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -361,6 +365,66 @@
 
   .ui-subtitle {
     @apply mt-1 text-sm text-muted;
+  }
+
+  /* --- Calendar (public booking) -------------------------------------- */
+  .ui-day {
+    @apply flex h-full w-full items-center justify-center rounded-md text-sm font-medium
+           text-ink transition-colors duration-100 hover:bg-subtle
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/45;
+  }
+
+  .ui-day:disabled {
+    @apply pointer-events-none text-muted/40;
+  }
+
+  .ui-day-selected {
+    @apply bg-primary text-on-primary hover:bg-primary-hover;
+  }
+
+  .ui-day-today {
+    @apply ring-1 ring-inset ring-ink/50;
+  }
+
+  /* --- Segmented control ----------------------------------------------- */
+  .ui-seg {
+    @apply inline-flex shrink-0 items-center rounded-md border border-line bg-subtle p-0.5;
+  }
+
+  .ui-seg > button {
+    @apply rounded-[0.3125rem] px-2.5 py-1 text-[0.75rem] font-medium text-muted
+           transition-colors duration-100 hover:text-ink;
+  }
+
+  .ui-seg > button.ui-seg-active {
+    @apply bg-surface text-ink shadow-xs;
+  }
+
+  /* --- Sidebar navigation ---------------------------------------------- */
+  .ui-side-link {
+    @apply flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-muted
+           transition-colors duration-100 hover:bg-subtle hover:text-ink;
+  }
+
+  .ui-side-link-active {
+    @apply bg-subtle text-ink;
+  }
+
+  /* --- App shell (host dashboard) -------------------------------------- */
+  .app-sidebar {
+    @apply fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-surface
+           transition-transform duration-200 ease-out lg:sticky lg:top-0 lg:z-auto lg:h-screen;
+    transform: translateX(-100%);
+  }
+
+  @media (width >= 64rem) {
+    .app-sidebar {
+      transform: none;
+    }
+  }
+
+  .app-sidebar.drawer-open {
+    transform: translateX(0);
   }
 
   /* --- Slot picker ------------------------------------------------------ */
