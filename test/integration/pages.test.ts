@@ -24,7 +24,10 @@ describe("pages", () => {
       headers: { cookie: host.cookie },
     });
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain("Upcoming");
+    const html = await res.text();
+    expect(html).toContain("Upcoming");
+    expect(html).toContain("app-sidebar");
+    expect(html).toContain("ui-side-link-active");
   });
 
   it("404s an unknown public profile", async () => {
@@ -44,6 +47,8 @@ describe("pages", () => {
     const html = await res.text();
     expect(html).toContain("Confirm booking");
     expect(html).toContain('id="page-data"');
+    expect(html).toContain("ui-day");
+    expect(html).toContain("data-timezone");
   });
 
   it("escapes host-controlled text", async () => {
