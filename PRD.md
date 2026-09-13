@@ -688,6 +688,11 @@ Unauthenticated endpoints are rate limited per client IP, keyed on `CF-Connectin
 The JSON API and the HTML form for one action **must** share a bucket, otherwise an attacker
 doubles their budget by alternating entry points.
 
+Limits are tunable per bucket via the `RATE_LIMIT_OVERRIDES` JSON variable (for example
+`{"book":50}`). It is intentionally per-bucket rather than a single global number: raising one
+endpoint must never quietly raise the auth limits. Malformed, unknown or non-positive entries
+are ignored rather than treated as unlimited.
+
 Auth limits are not only about credential stuffing: every login attempt runs PBKDF2 at 100k
 iterations — including for an unknown email, because the lookup miss is deliberately
 timing-equalised — so an unauthenticated caller can force expensive CPU work. The limit caps

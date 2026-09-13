@@ -12,9 +12,16 @@ export default defineConfig({
         bindings: {
           SESSION_SECRET: "test-secret-do-not-use-in-prod",
           TEST_MIGRATIONS: migrations,
-          // The suite books far more than 10 times a minute from one key.
-          // The real limit is exercised in test/integration/rateLimit.test.ts.
-          RATE_LIMIT_MAX: "1000000",
+          // The suite exercises each endpoint far above its production limit from a
+          // single key, so lift every bucket. The real limits are exercised in
+          // test/integration/rateLimit.test.ts and authRateLimit.test.ts, which
+          // supply their own narrower overrides.
+          RATE_LIMIT_OVERRIDES: JSON.stringify({
+            book: 1_000_000,
+            login: 1_000_000,
+            register: 1_000_000,
+            avatar: 1_000_000,
+          }),
         },
         d1Databases: { DB: "meetflow-test" },
         durableObjects: { RATE_LIMITER: { className: "RateLimiter", useSQLite: true } },

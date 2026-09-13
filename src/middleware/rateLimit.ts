@@ -17,7 +17,7 @@ export function clientKey(c: Context<AppEnv>): string {
 export interface RateLimitOptions {
   /** Namespaces the counter so separate endpoints do not share a bucket. */
   bucket: string;
-  /** Requests allowed per window. Overridable per-environment via RATE_LIMIT_MAX. */
+  /** Requests allowed per window. Overridable per-bucket via RATE_LIMIT_OVERRIDES. */
   limit: number;
   /** Window length in seconds. */
   periodSeconds?: number;
@@ -48,6 +48,65 @@ export const LIMITS = {
   avatar: { bucket: "avatar", limit: 20, periodSeconds: 3600 },
 } as const satisfies Record<string, { bucket: string; limit: number; periodSeconds: number }>;
 
+/** Bucket names the overrides map is allowed to mention. */
+const KNOWN_BUCKETS: ReadonlySet<string> = new Set(
+  Object.values(LIMITS).map((definition) => definition.bucket),
+);
+
+// Overrides rarely change, so parse once per distinct value rather than per request.
+let cachedRaw: string | undefined | null = null;
+let cachedOverrides: ReadonlyMap<string, number> = new Map();
+
+/**
+ * Parses RATE_LIMIT_OVERRIDES, a JSON object of bucket name to request limit —
+ * for example `{"book":50}`.
+ *
+ * Deliberately per-bucket: a single global override is a footgun, because
+ * raising one endpoint's limit would silently raise every other endpoint's too,
+ * including the auth limits that cap PBKDF2 CPU burn.
+ *
+ * Anything malformed is ignored rather than throwing, and rather than being
+ * treated as "unlimited": a bad value must never be able to disable a limit.
+ */
+export function parseRateLimitOverrides(raw: string | undefined): ReadonlyMap<string, number> {
+  const result = new Map<string, number>();
+  if (!raw) return result;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    console.warn("rateLimit: RATE_LIMIT_OVERRIDES is not valid JSON, ignoring it");
+    return result;
+  }
+
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    console.warn("rateLimit: RATE_LIMIT_OVERRIDES must be a JSON object, ignoring it");
+    return result;
+  }
+
+  for (const [bucket, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!KNOWN_BUCKETS.has(bucket)) {
+      console.warn(`rateLimit: RATE_LIMIT_OVERRIDES names unknown bucket "${bucket}", ignoring it`);
+      continue;
+    }
+    if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+      console.warn(`rateLimit: RATE_LIMIT_OVERRIDES["${bucket}"] is not a positive integer`);
+      continue;
+    }
+    result.set(bucket, value);
+  }
+
+  return result;
+}
+
+function overridesFor(raw: string | undefined): ReadonlyMap<string, number> {
+  if (raw === cachedRaw) return cachedOverrides;
+  cachedRaw = raw;
+  cachedOverrides = parseRateLimitOverrides(raw);
+  return cachedOverrides;
+}
+
 /**
  * Rejects with 429 once a caller exceeds `limit` requests per window.
  *
@@ -65,8 +124,7 @@ export function rateLimit({ bucket, limit, periodSeconds = 60, onLimited }: Rate
       return next();
     }
 
-    const override = Number(c.env.RATE_LIMIT_MAX);
-    const effectiveLimit = Number.isFinite(override) && override > 0 ? override : limit;
+    const effectiveLimit = overridesFor(c.env.RATE_LIMIT_OVERRIDES).get(bucket) ?? limit;
 
     const key = `${bucket}:${clientKey(c)}`;
     const stub = namespace.get(namespace.idFromName(key));

@@ -106,7 +106,10 @@ needed.
   `src/middleware/rateLimit.ts`), so alternating entry points does not double the budget.
   Auth limits also cap CPU: every login attempt runs PBKDF2 at 100k iterations, even for an
   unknown email. The middleware fails open if the binding is absent — losing rate limiting
-  beats losing the endpoint. `RATE_LIMIT_MAX` overrides every limit and exists for tests.
+  beats losing the endpoint. Limits are tunable per bucket with `RATE_LIMIT_OVERRIDES`, a JSON
+  object like `{"book":50}` — deliberately per-bucket, since one global override would raise
+  the auth limits too. Malformed or non-positive values are ignored rather than read as
+  unlimited, so a typo can never silently disable a limit.
 - **Why a Durable Object and not the Rate Limiting binding**: the `ratelimits` binding
   configures cleanly and shows up in `wrangler deploy` output, but never rejects on this
   account — verified in production at `limit: 2, period: 60` with 8 sequential requests

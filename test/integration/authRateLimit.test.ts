@@ -4,12 +4,16 @@ import app from "../../src/index";
 import { resetDb } from "../helpers";
 
 /**
- * The worker env sets RATE_LIMIT_MAX very high so the rest of the suite is not
- * throttled. These tests drive the real app with a low override instead, which
+ * The worker env lifts every bucket so the rest of the suite is not throttled.
+ * These tests drive the real app with a low override on specific buckets, which
  * exercises the actual mounted routes rather than a stand-in.
  */
-function withLimit(max: string) {
-  const testEnv = { ...env, RATE_LIMIT_MAX: max } as unknown as Cloudflare.Env;
+function withLimit(max: number, buckets: string[] = ["login", "register"]) {
+  const overrides = Object.fromEntries(buckets.map((b) => [b, max]));
+  const testEnv = {
+    ...env,
+    RATE_LIMIT_OVERRIDES: JSON.stringify(overrides),
+  } as unknown as Cloudflare.Env;
   return async (path: string, init: RequestInit, ip = "203.0.113.200") => {
     const ctx = createExecutionContext();
     const res = await app.fetch(
@@ -50,7 +54,7 @@ describe("auth rate limiting", () => {
   beforeEach(resetDb);
 
   it("throttles repeated failed logins on the JSON API", async () => {
-    const fetch = withLimit("3");
+    const fetch = withLimit(3);
     const attempt = () =>
       fetch(
         "/api/auth/login",
@@ -68,7 +72,7 @@ describe("auth rate limiting", () => {
   });
 
   it("shares one counter between the JSON API and the HTML form", async () => {
-    const fetch = withLimit("2");
+    const fetch = withLimit(2);
     const ip = "203.0.113.2";
 
     expect(
@@ -88,7 +92,7 @@ describe("auth rate limiting", () => {
   });
 
   it("renders the throttled login form as HTML, not JSON", async () => {
-    const fetch = withLimit("1");
+    const fetch = withLimit(1);
     const ip = "203.0.113.3";
     await fetch("/login", form({ email: "a@example.com", password: "x" }), ip);
 
@@ -101,7 +105,7 @@ describe("auth rate limiting", () => {
   });
 
   it("throttles registration and shares its counter with the form", async () => {
-    const fetch = withLimit("1");
+    const fetch = withLimit(1);
     const ip = "203.0.113.4";
 
     expect((await fetch("/api/auth/register", json(credentials), ip)).status).toBe(201);
@@ -115,7 +119,7 @@ describe("auth rate limiting", () => {
   });
 
   it("keeps login and register on separate counters", async () => {
-    const fetch = withLimit("1");
+    const fetch = withLimit(1);
     const ip = "203.0.113.5";
 
     expect(
@@ -130,7 +134,7 @@ describe("auth rate limiting", () => {
   });
 
   it("limits per client IP", async () => {
-    const fetch = withLimit("1");
+    const fetch = withLimit(1);
     const body = json({ email: "a@example.com", password: "x" });
 
     expect((await fetch("/api/auth/login", body, "203.0.113.6")).status).toBe(401);
@@ -139,7 +143,7 @@ describe("auth rate limiting", () => {
   });
 
   it("does not throttle logout", async () => {
-    const fetch = withLimit("1");
+    const fetch = withLimit(1);
     const ip = "203.0.113.8";
     expect((await fetch("/api/auth/logout", json({}), ip)).status).toBe(200);
     expect((await fetch("/api/auth/logout", json({}), ip)).status).toBe(200);
