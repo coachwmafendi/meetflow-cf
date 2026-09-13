@@ -2,6 +2,7 @@ import { escapeHtml, layout } from "./layout";
 import { utcToZonedParts } from "../lib/timezone";
 import { zoneDisplay } from "../lib/timezoneList";
 import { avatar, badge, button, emptyState, icon } from "./ui";
+import { TIMEZONE_SCRIPT } from "./timezoneSelect";
 import type { BookingRow, EventTypeRow, PublicUser } from "../types";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -88,45 +89,56 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
     durationMinutes: eventType.duration_minutes,
   };
 
+  const WEEKDAY_HEAD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    .map((d) => `<span class="py-1 text-center text-[0.75rem] font-medium text-muted">${d}</span>`)
+    .join("");
+
   return layout({
     title: eventType.name,
     nav: "public",
-    width: "md",
+    width: "lg",
     data,
     body: `
-      <div class="mx-auto max-w-3xl ui-rise" x-data="bookingWidget()" x-init="init()">
+      <div class="mx-auto max-w-5xl ui-rise" x-data="bookingWidget()" x-init="init()">
         <div class="ui-card overflow-hidden shadow-sm">
-          <div class="grid md:grid-cols-[17rem_1fr]">
+          <div class="grid lg:grid-cols-[17rem_minmax(0,1fr)_15rem]">
 
-            <!-- Event summary -->
-            <aside class="border-b border-line p-5 sm:p-6 md:border-r md:border-b-0">
-              <div class="flex items-center gap-2.5">
+            <!-- Host + event summary -->
+            <aside class="border-b border-line p-5 sm:p-6 lg:border-b-0 lg:border-r">
+              <a href="/${escapeHtml(host.slug)}" class="group flex items-center gap-2.5">
                 ${avatar(host.name, host.avatar_key, "size-10", "text-sm")}
-                <div class="min-w-0">
-                  <p class="truncate text-[0.8125rem] text-muted">${escapeHtml(host.name)}</p>
-                </div>
-              </div>
+                <span class="min-w-0">
+                  <span class="block truncate text-sm font-medium text-ink group-hover:underline">
+                    ${escapeHtml(host.name)}
+                  </span>
+                  <span class="block text-[0.75rem] text-muted">View public page</span>
+                </span>
+              </a>
 
               <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">${escapeHtml(
                 eventType.name,
               )}</h1>
 
-              <dl class="mt-3.5 space-y-2 text-[0.8125rem] text-muted">
-                <div class="flex items-center gap-2">
-                  ${icon("clock", "size-4 shrink-0")}
-                  <dd class="ui-time">${eventType.duration_minutes} minutes</dd>
+              <div class="mt-3">
+                <span class="ui-badge ui-badge-neutral">
+                  <span class="ui-time">${eventType.duration_minutes}m</span>
+                </span>
+              </div>
+
+              <div class="mt-3.5">
+                <label class="ui-label" for="guest-timezone">Timezone</label>
+                <select class="ui-select" id="guest-timezone" x-model="guestTimezone"
+                        data-timezone data-timezone-autodetect></select>
+              </div>
+
+              <template x-if="selected">
+                <div class="mt-4 border-t border-line pt-4">
+                  <p class="flex items-center gap-2 text-[0.8125rem] text-ink">
+                    ${icon("calendar", "size-4 shrink-0")}
+                    <span class="ui-time font-medium" x-text="summary()"></span>
+                  </p>
                 </div>
-                <div class="flex items-center gap-2">
-                  ${icon("globe", "size-4 shrink-0")}
-                  <dd class="truncate" x-text="timezoneLabel"></dd>
-                </div>
-                <template x-if="selected">
-                  <div class="flex items-start gap-2 text-ink">
-                    ${icon("calendar", "size-4 shrink-0 mt-0.5")}
-                    <dd class="ui-time font-medium" x-text="summary()"></dd>
-                  </div>
-                </template>
-              </dl>
+              </template>
 
               ${
                 eventType.description
@@ -137,42 +149,48 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
               }
             </aside>
 
-            <!-- Step 1: pick a slot -->
-            <section class="p-5 sm:p-6" x-show="step === 'slot'">
-              <div class="mb-4 flex items-end justify-between gap-3">
-                <div class="w-full max-w-[13rem]">
-                  <label class="ui-label" for="date">Select a date</label>
-                  <input class="ui-input font-mono" id="date" type="date"
-                         x-model="date" :min="today" @change="loadSlots()">
-                </div>
-                <p class="pb-2 text-[0.8125rem] text-muted" x-show="!loading && slots.length">
-                  <span class="ui-time" x-text="slots.length"></span> open
+            <!-- Step 1a: month calendar -->
+            <section class="border-b border-line p-5 sm:p-6 lg:border-b-0" x-show="step === 'slot'">
+              <div class="mb-3 flex items-center justify-between">
+                <p class="text-sm font-semibold text-ink">
+                  <span x-text="monthName()"></span>&nbsp;<span x-text="viewYear"></span>
                 </p>
+                <div class="flex items-center gap-1">
+                  <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2"
+                          :disabled="atEarliestMonth()" @click="prevMonth()"
+                          aria-label="Previous month">
+                    ${icon("chevronLeft", "size-4")}
+                  </button>
+                  <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2"
+                          @click="nextMonth()" aria-label="Next month">
+                    ${icon("chevronRight", "size-4")}
+                  </button>
+                </div>
               </div>
 
-              <!-- Loading skeleton: keeps layout stable instead of flashing empty -->
-              <div class="grid grid-cols-2 gap-2 sm:grid-cols-3" x-show="loading" x-cloak>
-                <template x-for="n in 6" :key="n">
-                  <div class="h-[42px] animate-pulse rounded-md border border-line bg-subtle"></div>
+              <div class="mb-1 grid grid-cols-7">${WEEKDAY_HEAD}</div>
+
+              <div class="grid grid-cols-7 gap-1">
+                <template x-for="cell in cells()" :key="cell.key">
+                  <div class="aspect-square">
+                    <button type="button" class="ui-day"
+                            x-show="!cell.blank"
+                            :class="{
+                              'ui-day-selected': cell.selected,
+                              'ui-day-today': cell.today,
+                            }"
+                            :disabled="!cell.enabled"
+                            @click="pickDay(cell.date)">
+                      <span x-text="cell.label"></span>
+                    </button>
+                    <div x-show="cell.blank" x-cloak></div>
+                  </div>
                 </template>
-              </div>
-
-              <div class="grid grid-cols-2 gap-2 sm:grid-cols-3" x-show="!loading">
-                <template x-for="slot in slots" :key="slot.startAt">
-                  <button type="button" class="ui-slot" @click="choose(slot)"
-                          x-text="label(slot.startAt)"></button>
-                </template>
-              </div>
-
-              <div x-show="!loading && slots.length === 0" x-cloak
-                   class="rounded-lg border border-dashed border-line-strong px-6 py-10 text-center">
-                <p class="text-sm font-medium text-ink">No times on this date</p>
-                <p class="mt-1 text-[0.8125rem] text-muted">Try another day.</p>
               </div>
             </section>
 
-            <!-- Step 2: details -->
-            <section class="p-5 sm:p-6" x-show="step === 'form'" x-cloak>
+            <!-- Step 1b: guest details -->
+            <section class="border-b border-line p-5 sm:p-6 lg:border-b-0" x-show="step === 'form'" x-cloak>
               <button type="button" @click="step = 'slot'"
                       class="ui-btn ui-btn-ghost ui-btn-sm -ml-2 mb-4">
                 ${icon("arrowLeft", "size-4")}<span>Change time</span>
@@ -205,6 +223,59 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
               </form>
             </section>
 
+            <!-- Step 2a: time list -->
+            <section class="p-5 sm:p-6" x-show="step === 'slot'" x-ref="times">
+              <div x-show="!selectedDate">
+                <p class="text-sm font-semibold text-ink">Select a date</p>
+                <p class="mt-1 text-[0.8125rem] text-muted">
+                  Pick a day on the calendar to see available times.
+                </p>
+              </div>
+
+              <div x-show="selectedDate">
+                <div class="mb-3 flex items-center justify-between gap-2">
+                  <p class="text-sm font-semibold text-ink" x-text="selectedDayLabel()"></p>
+                  <div class="ui-seg" role="group" aria-label="Time format">
+                    <button type="button" :class="hour12 ? 'ui-seg-active' : ''"
+                            @click="hour12 = true">12h</button>
+                    <button type="button" :class="!hour12 ? 'ui-seg-active' : ''"
+                            @click="hour12 = false">24h</button>
+                  </div>
+                </div>
+
+                <div class="space-y-2" x-show="loading" x-cloak>
+                  <template x-for="n in 5" :key="n">
+                    <div class="h-[42px] animate-pulse rounded-md border border-line bg-subtle"></div>
+                  </template>
+                </div>
+
+                <div class="max-h-[19rem] space-y-2 overflow-y-auto pr-1"
+                     x-show="!loading && slots.length">
+                  <template x-for="slot in slots" :key="slot.startAt">
+                    <button type="button" class="ui-slot w-full" @click="choose(slot)"
+                            x-text="label(slot.startAt)"></button>
+                  </template>
+                </div>
+
+                <div x-show="!loading && slots.length === 0" x-cloak
+                     class="rounded-lg border border-dashed border-line-strong px-4 py-8 text-center">
+                  <p class="text-sm font-medium text-ink">No times on this date</p>
+                  <p class="mt-1 text-[0.8125rem] text-muted">Try another day.</p>
+                </div>
+              </div>
+            </section>
+
+            <!-- Step 2b: chosen time summary -->
+            <section class="p-5 sm:p-6" x-show="step === 'form'" x-cloak>
+              <template x-if="selected">
+                <div>
+                  <p class="ui-eyebrow">Your booking</p>
+                  <p class="ui-time mt-2 text-base font-semibold text-ink" x-text="summary()"></p>
+                  <p class="mt-1 text-[0.8125rem] text-muted" x-text="timezoneLabel"></p>
+                </div>
+              </template>
+            </section>
+
           </div>
         </div>
 
@@ -213,15 +284,38 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
         </p>
       </div>
 
-      <style>[x-cloak]{display:none!important}</style>
       <script>
         function bookingWidget() {
-          const cfg = JSON.parse(document.getElementById('page-data').textContent);
+          var cfg = JSON.parse(document.getElementById('page-data').textContent);
+          var now = new Date();
+          var pad2 = function (n) { return String(n).padStart(2, '0'); };
+          var todayYmd = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+          var hour12Default = (function () {
+            var opt = Intl.DateTimeFormat().resolvedOptions().hour12;
+            return opt === undefined ? true : opt;
+          })();
+
           return {
             ...cfg,
             guestTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            // Mirrors zoneDisplay() on the server: people read "Kuala Lumpur
-            // (GMT+8)", never "Asia/Kuala_Lumpur".
+            hour12: hour12Default,
+            today: todayYmd,
+            todayYear: now.getFullYear(),
+            todayMonth: now.getMonth(),
+            viewYear: now.getFullYear(),
+            viewMonth: now.getMonth(),
+            days: [],
+            selectedDate: null,
+            slots: [],
+            loading: false,
+            step: 'slot',
+            selected: null,
+            guestName: '',
+            guestEmail: '',
+            notes: '',
+            error: '',
+            submitting: false,
+
             get timezoneLabel() {
               var zone = this.guestTimezone;
               var city = zone.split('/').pop().replace(/_/g, ' ');
@@ -233,40 +327,133 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
               return city + ' (GMT' + sign + Math.floor(abs / 60) +
                 (rest ? ':' + String(rest).padStart(2, '0') : '') + ')';
             },
-            today: new Date().toISOString().slice(0, 10),
-            date: new Date().toISOString().slice(0, 10),
-            slots: [], loading: true, step: 'slot', selected: null,
-            guestName: '', guestEmail: '', notes: '', error: '', submitting: false,
 
-            init() { this.loadSlots(); },
+            init() { this.loadMonth(); },
 
-            async loadSlots() {
-              this.loading = true; this.slots = [];
-              const url = '/api/public/' + this.hostSlug + '/' + this.eventSlug + '/slots?date=' + this.date;
+            monthName() {
+              var names = ['January', 'February', 'March', 'April', 'May', 'June',
+                           'July', 'August', 'September', 'October', 'November', 'December'];
+              return names[this.viewMonth];
+            },
+
+            atEarliestMonth() {
+              return this.viewYear === this.todayYear && this.viewMonth === this.todayMonth;
+            },
+
+            async loadMonth() {
+              this.days = [];
+              var url = '/api/public/' + this.hostSlug + '/' + this.eventSlug +
+                '/month?year=' + this.viewYear + '&month=' + (this.viewMonth + 1);
               try {
-                const res = await fetch(url);
+                var res = await fetch(url);
+                if (res.ok) this.days = (await res.json()).days;
+              } catch (e) {}
+            },
+
+            prevMonth() {
+              if (this.atEarliestMonth()) return;
+              this.selectedDate = null;
+              this.slots = [];
+              if (this.viewMonth === 0) { this.viewMonth = 11; this.viewYear -= 1; }
+              else this.viewMonth -= 1;
+              this.loadMonth();
+            },
+
+            nextMonth() {
+              this.selectedDate = null;
+              this.slots = [];
+              if (this.viewMonth === 11) { this.viewMonth = 0; this.viewYear += 1; }
+              else this.viewMonth += 1;
+              this.loadMonth();
+            },
+
+            cells() {
+              var firstDow = new Date(Date.UTC(this.viewYear, this.viewMonth, 1)).getUTCDay();
+              var count = new Date(Date.UTC(this.viewYear, this.viewMonth + 1, 0)).getUTCDate();
+              var out = [];
+              for (var i = 0; i < 42; i++) {
+                var d = i - firstDow + 1;
+                if (d < 1 || d > count) { out.push({ blank: true, key: 'b' + i }); continue; }
+                var date = this.viewYear + '-' + pad2(this.viewMonth + 1) + '-' + pad2(d);
+                out.push({
+                  blank: false,
+                  key: date,
+                  date: date,
+                  label: d,
+                  enabled: date >= this.today && this.days.indexOf(date) !== -1,
+                  selected: date === this.selectedDate,
+                  today: date === this.today,
+                });
+              }
+              return out;
+            },
+
+            async pickDay(date) {
+              this.selectedDate = date;
+              this.error = '';
+              this.loading = true;
+              this.slots = [];
+              var url = '/api/public/' + this.hostSlug + '/' + this.eventSlug + '/slots?date=' + date;
+              try {
+                var res = await fetch(url);
                 if (res.ok) this.slots = (await res.json()).slots;
               } finally {
                 this.loading = false;
+                var self = this;
+                this.$nextTick(function () {
+                  if (window.matchMedia('(max-width: 63.9rem)').matches) {
+                    var el = self.$refs.times;
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                  }
+                });
               }
             },
 
             label(startAt) {
-              return new Date(startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              // 'en-US' keeps the suffix deterministic ("10:00 AM"), which the
+              // replace below turns into cal.com's compact "10:00am".
+              return new Date(startAt).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: this.hour12,
+                timeZone: this.guestTimezone,
+              }).replace(/\\s?[AP]M/, function (m) { return m.trim().toLowerCase(); });
+            },
+
+            selectedDayLabel() {
+              if (!this.selectedDate) return '';
+              var d = new Date(this.selectedDate + 'T12:00:00Z');
+              var weekday = d.toLocaleDateString('en-US', { weekday: 'short', timeZone: this.guestTimezone });
+              var dayNum = Number(this.selectedDate.slice(8, 10));
+              var s = ['th', 'st', 'nd', 'rd'];
+              var v = dayNum % 100;
+              var suffix = s[(v - 20) % 10] || s[v] || s[0];
+              return weekday + ' ' + dayNum + suffix;
             },
 
             summary() {
               if (!this.selected) return '';
-              return new Date(this.selected.startAt).toLocaleString([], {
-                weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+              return new Date(this.selected.startAt).toLocaleString('en-US', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: this.hour12,
+                timeZone: this.guestTimezone,
               });
             },
 
-            choose(slot) { this.selected = slot; this.error = ''; this.step = 'form'; },
+            choose(slot) {
+              this.selected = slot;
+              this.error = '';
+              this.step = 'form';
+            },
 
             async submit() {
-              this.submitting = true; this.error = '';
-              const res = await fetch('/api/public/' + this.hostSlug + '/' + this.eventSlug + '/book', {
+              this.submitting = true;
+              this.error = '';
+              var res = await fetch('/api/public/' + this.hostSlug + '/' + this.eventSlug + '/book', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({
@@ -279,17 +466,21 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
               });
               this.submitting = false;
               if (res.status === 201) {
-                const { booking } = await res.json();
-                window.location.href = '/booking/' + booking.id + '/confirmed';
+                var created = await res.json();
+                window.location.href = '/booking/' + created.booking.id + '/confirmed';
                 return;
               }
-              const body = await res.json().catch(() => ({}));
+              var body = await res.json().catch(function () { return {}; });
               this.error = body.error || 'Something went wrong. Please try again.';
-              if (res.status === 409 || res.status === 422) { this.step = 'slot'; this.loadSlots(); }
+              if (res.status === 409 || res.status === 422) {
+                this.step = 'slot';
+                if (this.selectedDate) this.pickDay(this.selectedDate);
+              }
             },
           };
         }
-      </script>`,
+      </script>
+      ${TIMEZONE_SCRIPT}`,
   });
 }
 
