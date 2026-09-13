@@ -15,13 +15,20 @@ export const RESERVED_SLUGS = new Set([
   "app",
 ]);
 
+/** Public usernames: 3-32 chars, so the /:username namespace stays readable. */
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/;
+/** Event slugs live under a username, so 1-60 chars is fine ("c", "30", "1-1"). */
+const EVENT_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
 export function isSlug(value: string): boolean {
   return SLUG.test(value);
+}
+
+export function isEventSlug(value: string): boolean {
+  return EVENT_SLUG.test(value);
 }
 
 export function isAvailableSlug(value: string): boolean {

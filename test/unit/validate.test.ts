@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { isEmail, isHhmm, isSlug, isYmd, RESERVED_SLUGS } from "../../src/lib/validate";
+import {
+  isEmail,
+  isEventSlug,
+  isHhmm,
+  isSlug,
+  isYmd,
+  RESERVED_SLUGS,
+} from "../../src/lib/validate";
 
 describe("validate", () => {
   it("accepts sane slugs", () => {
@@ -12,6 +19,15 @@ describe("validate", () => {
     expect(isSlug("a")).toBe(false);
     expect(isSlug("wan_mafendi")).toBe(false);
     expect(isSlug("-wan")).toBe(false);
+  });
+
+  it("allows short event slugs but keeps usernames at 3+ chars", () => {
+    expect(isEventSlug("c")).toBe(true);
+    expect(isEventSlug("30")).toBe(true);
+    expect(isEventSlug("1-1")).toBe(true);
+    expect(isSlug("c")).toBe(false);
+    expect(isEventSlug("-c")).toBe(false);
+    expect(isEventSlug("C")).toBe(false);
   });
 
   it("blocks reserved slugs", () => {
