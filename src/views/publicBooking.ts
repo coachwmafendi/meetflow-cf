@@ -237,8 +237,10 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
                   <p class="text-sm font-semibold text-ink" x-text="selectedDayLabel()"></p>
                   <div class="ui-seg" role="group" aria-label="Time format">
                     <button type="button" :class="hour12 ? 'ui-seg-active' : ''"
+                            :aria-pressed="hour12 ? 'true' : 'false'"
                             @click="hour12 = true">12h</button>
                     <button type="button" :class="!hour12 ? 'ui-seg-active' : ''"
+                            :aria-pressed="!hour12 ? 'true' : 'false'"
                             @click="hour12 = false">24h</button>
                   </div>
                 </div>
@@ -286,6 +288,19 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
 
       <script>
         function bookingWidget() {
+          function offsetMinutes(zone, now) {
+            var parts = new Intl.DateTimeFormat('en-US', {
+              timeZone: zone, hour12: false,
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit', second: '2-digit'
+            }).formatToParts(now);
+            var get = function (t) {
+              for (var i = 0; i < parts.length; i++) if (parts[i].type === t) return Number(parts[i].value);
+              return 0;
+            };
+            var asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
+            return (asUtc - Math.floor(now.getTime() / 1000) * 1000) / 60000;
+          }
           var cfg = JSON.parse(document.getElementById('page-data').textContent);
           var now = new Date();
           var pad2 = function (n) { return String(n).padStart(2, '0'); };
@@ -315,11 +330,13 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
             notes: '',
             error: '',
             submitting: false,
+            monthReq: 0,
+            slotReq: 0,
 
             get timezoneLabel() {
               var zone = this.guestTimezone;
               var city = zone.split('/').pop().replace(/_/g, ' ');
-              var mins = -new Date().getTimezoneOffset();
+              var mins = offsetMinutes(zone, new Date());
               if (mins === 0) return city + ' (GMT)';
               var sign = mins < 0 ? '-' : '+';
               var abs = Math.abs(mins);
@@ -342,10 +359,12 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
 
             async loadMonth() {
               this.days = [];
+              var req = ++this.monthReq;
               var url = '/api/public/' + this.hostSlug + '/' + this.eventSlug +
                 '/month?year=' + this.viewYear + '&month=' + (this.viewMonth + 1);
               try {
                 var res = await fetch(url);
+                if (req !== this.monthReq) return;
                 if (res.ok) this.days = (await res.json()).days;
               } catch (e) {}
             },
@@ -393,11 +412,15 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
               this.error = '';
               this.loading = true;
               this.slots = [];
+              var req = ++this.slotReq;
               var url = '/api/public/' + this.hostSlug + '/' + this.eventSlug + '/slots?date=' + date;
               try {
                 var res = await fetch(url);
+                if (req !== this.slotReq) return;
                 if (res.ok) this.slots = (await res.json()).slots;
+              } catch (e) {
               } finally {
+                if (req !== this.slotReq) return;
                 this.loading = false;
                 var self = this;
                 this.$nextTick(function () {
