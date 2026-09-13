@@ -1,0 +1,5 @@
+node_modules/
+.wrangler/
+public/app.css
+.dev.vars
+.DS_Store
