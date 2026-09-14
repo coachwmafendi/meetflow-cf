@@ -9,7 +9,7 @@ import {
   hostNotification,
   type BookingEmailContext,
 } from "../lib/emailTemplates";
-import { cancelUrl } from "../lib/cancelToken";
+import { cancelUrl, rescheduleUrl } from "../lib/cancelToken";
 import { sendEmail, type SendOutcome } from "../lib/resend";
 import { nowIso } from "../lib/time";
 import type { Env } from "../types";
@@ -94,6 +94,11 @@ async function loadContext(
       cancelUrl:
         job.to === "guest" && job.kind !== "booking_cancelled"
           ? await cancelUrl(env.APP_URL, booking.id, env.SESSION_SECRET)
+          : undefined,
+      // Reschedule is only offered in the confirmation; reminders keep just the cancel link.
+      rescheduleUrl:
+        job.to === "guest" && job.kind === "booking_confirmed"
+          ? await rescheduleUrl(env.APP_URL, booking.id, env.SESSION_SECRET)
           : undefined,
     },
     guestTimeZone: booking.timezone,

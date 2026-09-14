@@ -44,6 +44,8 @@ export interface BookingEmailContext {
   appUrl: string;
   /** Signed guest cancellation link. Absent for host-facing mail. */
   cancelUrl?: string;
+  /** Signed guest reschedule link. Absent for host-facing mail. */
+  rescheduleUrl?: string;
 }
 
 /** "Monday, 14 September 2026 · 09:00–09:30 · Kuala Lumpur (GMT+8)" */
@@ -63,6 +65,7 @@ interface Layout {
   rows: Array<[string, string]>;
   note?: string | null;
   cta?: { label: string; href: string };
+  cta2?: { label: string; href: string };
   footer: string;
 }
 
@@ -103,6 +106,13 @@ function render(layout: Layout): { html: string; text: string } {
             )}</a></p>`
           : ""
       }
+      ${
+        layout.cta2
+          ? `<p style="margin:12px 0 4px;"><a href="${escapeHtml(layout.cta2.href)}" style="display:inline-block;color:#111827;font-size:14px;font-weight:500;text-decoration:underline;">${escapeHtml(
+              layout.cta2.label,
+            )}</a></p>`
+          : ""
+      }
     </td></tr>
     <tr><td style="padding:16px 28px 24px;border-top:1px solid #e5e7eb;">
       <p style="margin:0;font-size:12px;color:#9ca3af;">${escapeHtml(layout.footer)}</p>
@@ -118,6 +128,7 @@ function render(layout: Layout): { html: string; text: string } {
     ...layout.rows.map(([label, value]) => `${label}: ${value}`),
     ...(layout.note ? ["", layout.note] : []),
     ...(layout.cta ? ["", `${layout.cta.label}: ${layout.cta.href}`] : []),
+    ...(layout.cta2 ? ["", `${layout.cta2.label}: ${layout.cta2.href}`] : []),
     "",
     layout.footer,
   ].join("\n");
@@ -143,6 +154,9 @@ export function guestConfirmation(ctx: BookingEmailContext, guestTimeZone: strin
     cta: ctx.cancelUrl
       ? { label: "Cancel this booking", href: ctx.cancelUrl }
       : { label: `Book again with ${ctx.hostName}`, href: `${ctx.appUrl}/${ctx.hostSlug}` },
+    cta2: ctx.rescheduleUrl
+      ? { label: "Reschedule this booking", href: ctx.rescheduleUrl }
+      : undefined,
     footer: ctx.cancelUrl
       ? "Cancelling is instant and frees the slot for someone else."
       : "Need to change it? Reply to this email and let your host know.",

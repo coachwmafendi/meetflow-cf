@@ -66,6 +66,15 @@ describe("guestConfirmation", () => {
     const mail = guestConfirmation({ ...ctx, notes: "Discuss Q4 ads" }, "UTC");
     expect(mail.text).toContain("Discuss Q4 ads");
   });
+
+  it("includes a reschedule link when present", () => {
+    const mail = guestConfirmation(
+      { ...ctx, rescheduleUrl: "https://meetflow.example/booking/1/reschedule?token=abc" },
+      "UTC",
+    );
+    expect(mail.html).toContain("Reschedule this booking");
+    expect(mail.text).toContain("Reschedule this booking");
+  });
 });
 
 describe("hostNotification", () => {
@@ -76,6 +85,12 @@ describe("hostNotification", () => {
     expect(mail.subject).toBe("New booking: Ahmad — Consultation");
     expect(mail.text).toContain("09:00–09:30 · Kuala Lumpur (GMT+8)");
     expect(mail.text).toContain("ahmad@example.com");
+  });
+
+  it("does not add a reschedule link to host mail", () => {
+    const mail = hostNotification({ ...ctx, rescheduleUrl: "https://x" }, "UTC");
+    expect(mail.html).not.toContain("Reschedule");
+    expect(mail.text).not.toContain("Reschedule");
   });
 });
 
