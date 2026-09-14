@@ -5,6 +5,7 @@ import {
   getBookingById,
   getBookingOwned,
   insertBookingIfFree,
+  rescheduleBookingIfFree,
 } from "../db/bookings";
 import { findUserById, findUserBySlug } from "../db/users";
 import { addMinutes, isoUtc, nowIso, parseIsoUtc } from "../lib/time";
@@ -117,6 +118,86 @@ export async function createBooking(
   });
   if (!booking) throw new BookingError("This time slot is no longer available.", 409);
   return booking;
+}
+
+export interface RescheduleInput {
+  bookingId: number;
+  token: string;
+  secret: string;
+  newStartAt: string;
+  guestTimezone: string;
+  nowMs?: number;
+}
+
+/**
+ * Moves a booking to a new slot of the same event type. The token is the
+ * authorisation; guest details are copied from the existing booking.
+ */
+export async function rescheduleBooking(
+  db: D1Database,
+  input: RescheduleInput,
+): Promise<GuestCancellable & { booking: BookingRow }> {
+  const resolved = await resolveCancelToken(db, input.bookingId, input.token, input.secret);
+
+  if (resolved.booking.status !== "confirmed") {
+    throw new BookingError("This booking can no longer be rescheduled.", 409);
+  }
+  const nowMs = input.nowMs ?? Date.now();
+  if (Date.parse(resolved.booking.end_at) <= nowMs) {
+    throw new BookingError("This meeting has already taken place.", 409);
+  }
+  if (!isValidTimeZone(input.guestTimezone)) {
+    throw new BookingError("Invalid timezone", 400);
+  }
+
+  let start: Date;
+  try {
+    start = parseIsoUtc(input.newStartAt);
+  } catch {
+    throw new BookingError("Invalid start time", 400);
+  }
+  if (start.getTime() < nowMs) throw new BookingError("That time is in the past", 422);
+
+  const { host, eventType } = resolved;
+  const end = addMinutes(start, eventType.duration_minutes);
+  const startIso = isoUtc(start);
+  const endIso = isoUtc(end);
+
+  const hostDate = zonedDateString(start, host.timezone);
+  if (!isYmd(hostDate)) throw new BookingError("Invalid start time", 400);
+
+  const { grid, free } = await getDaySlots(db, {
+    hostId: host.id,
+    hostTimezone: host.timezone,
+    eventTypeId: eventType.id,
+    durationMinutes: eventType.duration_minutes,
+    bufferMinutes: eventType.buffer_minutes,
+    dateYmd: hostDate,
+    nowMs,
+  });
+  if (!grid.some((s) => s.startAt === startIso)) {
+    throw new BookingError("That time is not available", 422);
+  }
+  if (!free.some((s) => s.startAt === startIso)) {
+    throw new BookingError("This time slot is no longer available.", 409);
+  }
+
+  const booking = await rescheduleBookingIfFree(db, {
+    oldBookingId: resolved.booking.id,
+    userId: host.id,
+    eventTypeId: eventType.id,
+    guestName: resolved.booking.guest_name,
+    guestEmail: resolved.booking.guest_email,
+    startAt: startIso,
+    endAt: endIso,
+    timezone: input.guestTimezone,
+    notes: resolved.booking.notes,
+    now: nowIso(),
+    bufferMinutes: eventType.buffer_minutes,
+  });
+  if (!booking) throw new BookingError("This booking can no longer be rescheduled.", 409);
+
+  return { ...resolved, booking };
 }
 
 export interface GuestCancellable {

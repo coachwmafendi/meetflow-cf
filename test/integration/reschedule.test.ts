@@ -1,6 +1,8 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { insertBookingIfFree, rescheduleBookingIfFree } from "../../src/db/bookings";
+import { rescheduleBooking } from "../../src/services/booking";
+import { signCancelToken } from "../../src/lib/cancelToken";
 import { api, createHost, resetDb } from "../helpers";
 
 async function seedEventType(cookie: string): Promise<number> {
@@ -128,5 +130,112 @@ describe("rescheduleBookingIfFree", () => {
       .bind(host.id)
       .first<{ n: number }>();
     expect(confirmed!.n).toBe(0);
+  });
+});
+
+const SECRET = "test-secret-do-not-use-in-prod";
+
+async function seedBookable() {
+  const host = await createHost("wan", "Asia/Kuala_Lumpur");
+  await api("/api/availability", {
+    method: "PUT",
+    cookie: host.cookie,
+    body: JSON.stringify({ rules: [{ day_of_week: 1, start_time: "09:00", end_time: "11:00" }] }),
+  });
+  const created = await api("/api/event-types", {
+    method: "POST",
+    cookie: host.cookie,
+    body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 30 }),
+  });
+  const { eventType } = await created.json<{ eventType: { id: number } }>();
+  const booked = await api("/api/public/wan/consultation/book", {
+    method: "POST",
+    body: JSON.stringify({
+      start_at: "2026-10-05T01:00:00Z",
+      guest_name: "Ahmad",
+      guest_email: "ahmad@example.com",
+      notes: "keep me",
+      timezone: "Asia/Kuala_Lumpur",
+    }),
+  });
+  const { booking } = await booked.json<{ booking: { id: number } }>();
+  return { host, eventType, booking };
+}
+
+describe("rescheduleBooking", () => {
+  beforeEach(resetDb);
+
+  it("moves a booking and copies guest details", async () => {
+    const { booking } = await seedBookable();
+    const token = await signCancelToken(booking.id, SECRET);
+    const result = await rescheduleBooking(env.DB, {
+      bookingId: booking.id,
+      token,
+      secret: SECRET,
+      newStartAt: "2026-10-05T02:00:00Z",
+      guestTimezone: "Asia/Kuala_Lumpur",
+      nowMs: Date.parse("2026-10-01T00:00:00Z"),
+    });
+    expect(result.booking.start_at).toBe("2026-10-05T02:00:00Z");
+    expect(result.booking.guest_name).toBe("Ahmad");
+    expect(result.booking.notes).toBe("keep me");
+
+    const oldRow = await env.DB.prepare("SELECT status FROM bookings WHERE id = ?")
+      .bind(booking.id)
+      .first<{ status: string }>();
+    expect(oldRow!.status).toBe("cancelled");
+  });
+
+  it("rejects an invalid token", async () => {
+    const { booking } = await seedBookable();
+    await expect(
+      rescheduleBooking(env.DB, {
+        bookingId: booking.id,
+        token: "garbage",
+        secret: SECRET,
+        newStartAt: "2026-10-05T02:00:00Z",
+        guestTimezone: "UTC",
+        nowMs: Date.parse("2026-10-01T00:00:00Z"),
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("rejects a slot taken by another booking", async () => {
+    const { booking } = await seedBookable();
+    await api("/api/public/wan/consultation/book", {
+      method: "POST",
+      body: JSON.stringify({
+        start_at: "2026-10-05T02:00:00Z",
+        guest_name: "Bob",
+        guest_email: "bob@example.com",
+        timezone: "UTC",
+      }),
+    });
+    const token = await signCancelToken(booking.id, SECRET);
+    await expect(
+      rescheduleBooking(env.DB, {
+        bookingId: booking.id,
+        token,
+        secret: SECRET,
+        newStartAt: "2026-10-05T02:00:00Z",
+        guestTimezone: "UTC",
+        nowMs: Date.parse("2026-10-01T00:00:00Z"),
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("refuses to reschedule a past booking", async () => {
+    const { booking } = await seedBookable();
+    const token = await signCancelToken(booking.id, SECRET);
+    await expect(
+      rescheduleBooking(env.DB, {
+        bookingId: booking.id,
+        token,
+        secret: SECRET,
+        newStartAt: "2026-10-12T02:00:00Z",
+        guestTimezone: "UTC",
+        nowMs: Date.parse("2026-10-30T00:00:00Z"),
+      }),
+    ).rejects.toMatchObject({ status: 409 });
   });
 });
