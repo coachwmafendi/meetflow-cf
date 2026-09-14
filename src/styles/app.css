@@ -426,6 +426,11 @@
 
   .ui-dialog {
     @apply w-full max-w-md rounded-xl border border-line bg-surface p-0 shadow-lg;
+    /* Preflight zeroes the UA stylesheet's dialog centering; restore it. */
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    max-height: calc(100dvh - 4rem);
   }
 
   .ui-dialog::backdrop {
