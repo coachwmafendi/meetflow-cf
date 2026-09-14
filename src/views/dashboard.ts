@@ -91,6 +91,7 @@ export function dashboardPage(
   user: PublicUser,
   stats: DashboardStats,
   recent: BookingWithEvent[],
+  toast = "",
 ): string {
   const rows = recent.map((b) => [
     `<div class="font-medium text-ink">${escapeHtml(b.guest_name)}</div>
@@ -107,6 +108,7 @@ export function dashboardPage(
     activeNav: "/dashboard",
     hostName: user.name,
     hostAvatarKey: user.avatar_key,
+    toast,
     body: `
       ${pageHeader({
         eyebrow: "Overview",
@@ -154,7 +156,7 @@ export function dashboardPage(
 
 /* -------------------------------------------------------------------------- */
 
-export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[]): string {
+export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toast = ""): string {
   const cards = eventTypes
     .map((e, i) => {
       const path = `/${user.slug}/${e.slug}`;
@@ -213,6 +215,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[]): st
     activeNav: "/dashboard/event-types",
     hostName: user.name,
     hostAvatarKey: user.avatar_key,
+    toast,
     body: `
       ${pageHeader({
         eyebrow: "Bookable meetings",
@@ -262,6 +265,7 @@ export function eventTypeEditPage(
   eventType: EventTypeRow,
   bookingCount: number,
   error?: string,
+  toast = "",
 ): string {
   const path = `/${user.slug}/${eventType.slug}`;
   const active = eventType.is_active === 1;
@@ -285,6 +289,7 @@ export function eventTypeEditPage(
     activeNav: "/dashboard/event-types",
     hostName: user.name,
     hostAvatarKey: user.avatar_key,
+    toast,
     body: `
       <a href="/dashboard/event-types" class="ui-btn ui-btn-ghost ui-btn-sm -ml-2 mb-4">
         ${icon("arrowLeft", "size-4")}<span>Event types</span>
@@ -364,7 +369,11 @@ export function eventTypeEditPage(
 
 /* -------------------------------------------------------------------------- */
 
-export function availabilityPage(user: PublicUser, rules: AvailabilityRuleRow[]): string {
+export function availabilityPage(
+  user: PublicUser,
+  rules: AvailabilityRuleRow[],
+  toast = "",
+): string {
   const rows = DAY_NAMES.map((day, index) => {
     const dayRules = rules.filter((r) => r.day_of_week === index);
     const active = dayRules.length > 0;
@@ -413,6 +422,7 @@ export function availabilityPage(user: PublicUser, rules: AvailabilityRuleRow[])
     activeNav: "/dashboard/availability",
     hostName: user.name,
     hostAvatarKey: user.avatar_key,
+    toast,
     body: `
       ${pageHeader({
         eyebrow: "Weekly schedule",
@@ -478,7 +488,8 @@ export function availabilityPage(user: PublicUser, rules: AvailabilityRuleRow[])
 export function bookingsPage(
   user: PublicUser,
   bookings: BookingWithEvent[],
-  scope: string,
+  scope: "upcoming" | "past" | "cancelled",
+  toast = "",
 ): string {
   const tab = (value: string, label: string) =>
     `<a href="/dashboard/bookings?scope=${value}" class="ui-nav-link ${
@@ -524,6 +535,7 @@ export function bookingsPage(
     activeNav: "/dashboard/bookings",
     hostName: user.name,
     hostAvatarKey: user.avatar_key,
+    toast,
     body: `
       ${pageHeader({
         eyebrow: "Your calendar",
@@ -557,13 +569,14 @@ export function bookingsPage(
 
 /* -------------------------------------------------------------------------- */
 
-export function settingsPage(user: PublicUser, error?: string): string {
+export function settingsPage(user: PublicUser, error?: string, toast = ""): string {
   return layout({
     title: "Settings",
     nav: "host",
     activeNav: "/dashboard/settings",
     hostName: user.name,
     hostAvatarKey: user.avatar_key,
+    toast,
     body: `
       ${pageHeader({
         eyebrow: "Account",

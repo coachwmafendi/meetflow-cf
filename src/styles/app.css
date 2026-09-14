@@ -427,6 +427,25 @@
     transform: translateX(0);
   }
 
+  /* --- Toast ------------------------------------------------------------- */
+  .toast {
+    @apply pointer-events-none fixed bottom-5 right-5 z-[60] flex max-w-sm items-center gap-2
+           rounded-lg border border-line bg-surface px-4 py-3 text-sm font-medium text-ink shadow-lg;
+    animation: toast-out 4.5s var(--ease-out-quart) forwards;
+  }
+
+  @keyframes toast-out {
+    0%,
+    82% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
   /* --- Slot picker ------------------------------------------------------ */
   .ui-slot {
     @apply flex items-center justify-center rounded-md border border-line

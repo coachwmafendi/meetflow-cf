@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { listRules, replaceRules, type RuleInput } from "../db/availability";
 import { dashboardStats, getBookingById, listBookings } from "../db/bookings";
 import {
@@ -63,6 +64,11 @@ const notFound = () =>
      </main></body></html>`,
     404,
   );
+
+const readToast = (c: Context<AppEnv>) => (c.req.query("toast") ?? "").slice(0, 120);
+
+const toastRedirect = (c: Context<AppEnv>, path: string, message?: string) =>
+  c.redirect(`${path}${message ? `?toast=${encodeURIComponent(message)}` : ""}`, 302);
 
 pageRoutes.get("/", (c) => (c.get("user") ? c.redirect("/dashboard") : c.redirect("/login")));
 
@@ -135,12 +141,12 @@ dashboard.get("/", async (c) => {
     isoUtc(new Date(dayStart.getTime() + 86_400_000)),
   );
   const recent = (await listBookings(c.env.DB, user.id, "upcoming", nowIso())).slice(0, 5);
-  return html(dashboardPage(user, stats, recent));
+  return html(dashboardPage(user, stats, recent, readToast(c)));
 });
 
 dashboard.get("/event-types", async (c) => {
   const user = c.get("user");
-  return html(eventTypesPage(user, await listEventTypes(c.env.DB, user.id)));
+  return html(eventTypesPage(user, await listEventTypes(c.env.DB, user.id), readToast(c)));
 });
 
 dashboard.post("/event-types", async (c) => {
@@ -148,6 +154,7 @@ dashboard.post("/event-types", async (c) => {
   const form = await c.req.parseBody();
   const slug = String(form.slug ?? "").toLowerCase();
   const duration = Number(form.duration_minutes);
+  let ok = false;
   if (isEventSlug(slug) && Number.isInteger(duration) && duration >= 5 && duration <= 480) {
     try {
       await insertEventType(c.env.DB, {
@@ -158,11 +165,14 @@ dashboard.post("/event-types", async (c) => {
         durationMinutes: duration,
         now: nowIso(),
       });
+      ok = true;
     } catch (err) {
       if (!String(err).includes("UNIQUE")) throw err;
     }
   }
-  return c.redirect("/dashboard/event-types", 302);
+  return ok
+    ? toastRedirect(c, "/dashboard/event-types", "Event type created")
+    : c.redirect("/dashboard/event-types", 302);
 });
 
 dashboard.get("/event-types/:id", async (c) => {
@@ -171,7 +181,7 @@ dashboard.get("/event-types/:id", async (c) => {
   const eventType = await getEventTypeOwned(c.env.DB, id, user.id);
   if (!eventType) return notFound();
   const bookings = await countBookingsForEventType(c.env.DB, id);
-  return html(eventTypeEditPage(user, eventType, bookings));
+  return html(eventTypeEditPage(user, eventType, bookings, undefined, readToast(c)));
 });
 
 dashboard.post("/event-types/:id", async (c) => {
@@ -212,7 +222,7 @@ dashboard.post("/event-types/:id", async (c) => {
       409,
     );
   }
-  return c.redirect("/dashboard/event-types", 302);
+  return toastRedirect(c, "/dashboard/event-types", "Changes saved");
 });
 
 dashboard.post("/event-types/:id/toggle", async (c) => {
@@ -229,7 +239,11 @@ dashboard.post("/event-types/:id/toggle", async (c) => {
     isActive: current.is_active === 1 ? 0 : 1,
     now: nowIso(),
   });
-  return c.redirect(`/dashboard/event-types/${id}`, 302);
+  return toastRedirect(
+    c,
+    `/dashboard/event-types/${id}`,
+    current.is_active === 1 ? "Event type deactivated" : "Event type activated",
+  );
 });
 
 dashboard.post("/event-types/:id/delete", async (c) => {
@@ -249,15 +263,50 @@ dashboard.post("/event-types/:id/delete", async (c) => {
       isActive: 0,
       now: nowIso(),
     });
+    return toastRedirect(c, "/dashboard/event-types", "Event type deactivated");
   } else {
     await deleteEventType(c.env.DB, id, user.id);
+    return toastRedirect(c, "/dashboard/event-types", "Event type deleted");
   }
-  return c.redirect("/dashboard/event-types", 302);
+});
+
+dashboard.post("/event-types/:id/clone", async (c) => {
+  const user = c.get("user");
+  const id = Number(c.req.param("id"));
+  const current = await getEventTypeOwned(c.env.DB, id, user.id);
+  if (!current) return notFound();
+
+  const baseSlug = `${current.slug}-copy`;
+  const name = `${current.name.slice(0, 92)} (copy)`;
+  const now = nowIso();
+  let cloned = false;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const candidate = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+    try {
+      await insertEventType(c.env.DB, {
+        userId: user.id,
+        name,
+        slug: candidate,
+        description: current.description,
+        durationMinutes: current.duration_minutes,
+        now,
+      });
+      cloned = true;
+      break;
+    } catch (err) {
+      if (!String(err).includes("UNIQUE")) throw err;
+    }
+  }
+  return toastRedirect(
+    c,
+    "/dashboard/event-types",
+    cloned ? "Event type cloned" : "Could not clone event type",
+  );
 });
 
 dashboard.get("/availability", async (c) => {
   const user = c.get("user");
-  return html(availabilityPage(user, await listRules(c.env.DB, user.id)));
+  return html(availabilityPage(user, await listRules(c.env.DB, user.id), readToast(c)));
 });
 
 dashboard.post("/availability", async (c) => {
@@ -279,7 +328,7 @@ dashboard.post("/availability", async (c) => {
   }
 
   await replaceRules(c.env.DB, user.id, rules, nowIso());
-  return c.redirect("/dashboard/availability", 302);
+  return toastRedirect(c, "/dashboard/availability", "Availability saved");
 });
 
 dashboard.get("/bookings", async (c) => {
@@ -287,7 +336,7 @@ dashboard.get("/bookings", async (c) => {
   const raw = c.req.query("scope") ?? "upcoming";
   const scope = raw === "past" || raw === "cancelled" ? raw : "upcoming";
   const bookings = await listBookings(c.env.DB, user.id, scope, nowIso());
-  return html(bookingsPage(user, bookings, scope));
+  return html(bookingsPage(user, bookings, scope, readToast(c)));
 });
 
 dashboard.post("/bookings/:id/cancel", async (c) => {
@@ -297,10 +346,10 @@ dashboard.post("/bookings/:id/cancel", async (c) => {
   } catch (err) {
     if (!(err instanceof BookingError)) throw err;
   }
-  return c.redirect("/dashboard/bookings", 302);
+  return toastRedirect(c, "/dashboard/bookings", "Booking cancelled");
 });
 
-dashboard.get("/settings", (c) => html(settingsPage(c.get("user"))));
+dashboard.get("/settings", (c) => html(settingsPage(c.get("user"), undefined, readToast(c))));
 
 dashboard.post("/settings/avatar", rateLimit(LIMITS.avatar), async (c) => {
   const user = c.get("user");
@@ -325,7 +374,7 @@ dashboard.post("/settings/avatar", rateLimit(LIMITS.avatar), async (c) => {
     if (err instanceof ImageError) return html(settingsPage(user, err.message), 400);
     throw err;
   }
-  return c.redirect("/dashboard/settings", 302);
+  return toastRedirect(c, "/dashboard/settings", "Profile photo updated");
 });
 
 dashboard.post("/settings/avatar/remove", async (c) => {
@@ -334,7 +383,7 @@ dashboard.post("/settings/avatar/remove", async (c) => {
     await setAvatarKey(c.env.DB, user.id, null, nowIso());
     c.executionCtx.waitUntil(c.env.AVATARS.delete(user.avatar_key));
   }
-  return c.redirect("/dashboard/settings", 302);
+  return toastRedirect(c, "/dashboard/settings", "Profile photo removed");
 });
 
 dashboard.post("/settings", async (c) => {
@@ -345,7 +394,7 @@ dashboard.post("/settings", async (c) => {
   if (name && isValidTimeZone(timezone)) {
     await updateUserSettings(c.env.DB, user.id, { name, timezone, now: nowIso() });
   }
-  return c.redirect("/dashboard/settings", 302);
+  return toastRedirect(c, "/dashboard/settings", "Settings saved");
 });
 
 pageRoutes.route("/dashboard", dashboard);

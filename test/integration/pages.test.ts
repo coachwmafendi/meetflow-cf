@@ -149,4 +149,69 @@ describe("pages", () => {
     expect(res.headers.get("location")).toBe("/login");
     expect(res.headers.get("set-cookie")).toContain("Max-Age=0");
   });
+
+  it("renders a toast from the query param", async () => {
+    const host = await createHost("wan");
+    const res = await SELF.fetch(
+      "https://example.com/dashboard/event-types?toast=Event+type+cloned",
+      { headers: { cookie: host.cookie } },
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Event type cloned");
+    expect(html).toContain('class="toast"');
+  });
+
+  it("clones an event type with a unique slug", async () => {
+    const host = await createHost("wan");
+    const created = await SELF.fetch("https://example.com/api/event-types", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 30 }),
+    });
+    const { eventType } = await created.json<{ eventType: { id: number } }>();
+
+    const first = await SELF.fetch(
+      `https://example.com/dashboard/event-types/${eventType.id}/clone`,
+      { method: "POST", headers: { cookie: host.cookie }, redirect: "manual" },
+    );
+    expect(first.status).toBe(302);
+    expect(first.headers.get("location")).toContain("toast=Event%20type%20cloned");
+
+    const second = await SELF.fetch(
+      `https://example.com/dashboard/event-types/${eventType.id}/clone`,
+      { method: "POST", headers: { cookie: host.cookie }, redirect: "manual" },
+    );
+    expect(second.status).toBe(302);
+
+    const list = await SELF.fetch("https://example.com/dashboard/event-types", {
+      headers: { cookie: host.cookie },
+    });
+    const html = await list.text();
+    expect(html).toContain("/wan/consultation-copy");
+    expect(html).toContain("/wan/consultation-copy-2");
+    expect(html).toContain("Consultation (copy)");
+  });
+
+  it("deleting an event type redirects with a toast", async () => {
+    const host = await createHost("wan");
+    const created = await SELF.fetch("https://example.com/api/event-types", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 30 }),
+    });
+    const { eventType } = await created.json<{ eventType: { id: number } }>();
+
+    const res = await SELF.fetch(
+      `https://example.com/dashboard/event-types/${eventType.id}/delete`,
+      { method: "POST", headers: { cookie: host.cookie }, redirect: "manual" },
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("toast=Event%20type%20deleted");
+
+    const list = await SELF.fetch("https://example.com/dashboard/event-types", {
+      headers: { cookie: host.cookie },
+    });
+    expect(await list.text()).not.toContain("/wan/consultation");
+  });
 });

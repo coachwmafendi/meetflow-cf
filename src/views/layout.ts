@@ -13,6 +13,8 @@ export interface LayoutOptions {
   hostName?: string;
   /** R2 object key for the host's avatar, shown in the sidebar. */
   hostAvatarKey?: string | null;
+  /** One-line success message rendered as an auto-dismissing toast. */
+  toast?: string;
   /** Constrains <main>. Auth and booking screens are narrower than the dashboard. */
   width?: "sm" | "md" | "lg";
 }
@@ -178,6 +180,13 @@ function hostLayout(options: LayoutOptions, dataScript: string): string {
       <main class="mx-auto w-full max-w-5xl px-5 pb-10 pt-20 sm:px-6 lg:pt-10">${options.body}</main>
     </div>
   </div>
+  ${
+    options.toast
+      ? `<div class="toast" role="status">${icon("check", "size-4 shrink-0 text-success")}<span>${escapeHtml(
+          options.toast,
+        )}</span></div>`
+      : ""
+  }
   ${dataScript}
   ${THEME_TOGGLE_SCRIPT}
 </body>
