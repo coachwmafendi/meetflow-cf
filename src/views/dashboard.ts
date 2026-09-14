@@ -23,6 +23,77 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/**
+ * Opens the per-card embed dialog, fills it with an iframe snippet for the
+ * booking page (absolute URL from the current origin), and handles copying
+ * the snippet. Backdrop clicks close the dialog.
+ */
+const EMBED_SCRIPT = `
+  <script>
+    (function () {
+      function snippet(url) {
+        return '<iframe src="' + url + '" width="100%" height="600" style="border:0" loading="lazy" title="Booking page"></iframe>';
+      }
+
+      document.addEventListener("click", function (event) {
+        var openBtn = event.target.closest("[data-embed-open]");
+        if (openBtn) {
+          var dialog = document.getElementById(openBtn.getAttribute("data-embed-open"));
+          if (!dialog) return;
+          var url = new URL(openBtn.getAttribute("data-path"), window.location.origin).href;
+          var code = dialog.querySelector("[data-embed-code]");
+          if (code) code.value = snippet(url);
+          dialog.showModal();
+          return;
+        }
+
+        var closeBtn = event.target.closest("[data-dialog-close]");
+        if (closeBtn) {
+          closeBtn.closest("dialog").close();
+          return;
+        }
+
+        var copyBtn = event.target.closest("[data-embed-copy]");
+        if (copyBtn) {
+          var dialog = copyBtn.closest("dialog");
+          var code = dialog.querySelector("[data-embed-code]");
+          var url = code ? code.value : "";
+          if (!url) return;
+
+          function done() {
+            var original = copyBtn.innerHTML;
+            copyBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="size-4"><path d="m4.5 12.5 5 5 10-11"/></svg><span>Copied</span>';
+            window.setTimeout(function () { copyBtn.innerHTML = original; }, 1600);
+          }
+
+          function fallback() {
+            var ta = document.createElement("textarea");
+            ta.value = url;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand("copy"); } catch (e) {}
+            document.body.removeChild(ta);
+            done();
+          }
+
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(done, fallback);
+          } else {
+            fallback();
+          }
+        }
+      });
+
+      Array.prototype.forEach.call(document.querySelectorAll("dialog.ui-dialog"), function (dialog) {
+        dialog.addEventListener("click", function (event) {
+          if (event.target === dialog) dialog.close();
+        });
+      });
+    })();
+  </script>`;
+
 /** "Mon 14 Sep · 09:00" — weekday first, because hosts scan by day. */
 function whenParts(iso: string, timeZone: string): { day: string; clock: string } {
   const p = utcToZonedParts(new Date(iso), timeZone);
@@ -136,22 +207,69 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
           }
           <p class="mt-2.5 truncate font-mono text-[0.75rem] text-muted">${escapeHtml(path)}</p>
         </div>
-        <div class="flex shrink-0 items-center gap-2">
+        <div class="relative flex shrink-0 items-center gap-2" x-data="{ open: false }"
+             @click.outside="open = false">
           <a class="ui-btn ui-btn-ghost ui-btn-sm" href="${escapeHtml(path)}"
              target="_blank" rel="noopener">
             ${icon("external", "size-4")}<span>Open</span>
           </a>
-          <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm"
-                  data-copy="${escapeHtml(path)}" aria-label="Copy link">
-            ${icon("copy", "size-4")}<span>Copy link</span>
-          </button>
           ${button({
             label: "Edit",
             href: `/dashboard/event-types/${e.id}`,
             variant: "secondary",
             size: "sm",
           })}
+          <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" aria-label="More actions"
+                  :aria-expanded="open ? 'true' : 'false'" @click="open = !open">
+            ${icon("menu", "size-4")}
+          </button>
+
+          <div x-show="open" x-cloak x-transition.opacity.duration-100
+               class="ui-menu absolute right-0 top-full z-20 mt-1 min-w-[11rem]">
+            <button type="button" class="ui-menu-item" data-copy="${escapeHtml(path)}">
+              ${icon("copy", "size-4")}<span>Copy link</span>
+            </button>
+            <button type="button" class="ui-menu-item" data-embed-open="embed-${e.id}"
+                    data-path="${escapeHtml(path)}">
+              ${icon("code", "size-4")}<span>Embed</span>
+            </button>
+            <form method="post" action="/dashboard/event-types/${e.id}/clone">
+              <button type="submit" class="ui-menu-item">
+                ${icon("plus", "size-4")}<span>Clone</span>
+              </button>
+            </form>
+            <form method="post" action="/dashboard/event-types/${e.id}/delete"
+                  onsubmit="return confirm('Delete this event type? Event types with bookings are deactivated instead.')">
+              <button type="submit" class="ui-menu-item ui-menu-item-danger">
+                ${icon("x", "size-4")}<span>Delete</span>
+              </button>
+            </form>
+          </div>
         </div>
+
+        <dialog id="embed-${e.id}" class="ui-dialog" aria-labelledby="embed-${e.id}-title">
+          <div class="ui-dialog-body">
+            <div class="flex items-center justify-between gap-4">
+              <h3 id="embed-${e.id}-title" class="text-sm font-semibold text-ink">
+                Embed this booking page
+              </h3>
+              <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2"
+                      data-dialog-close aria-label="Close">
+                ${icon("x", "size-4")}
+              </button>
+            </div>
+            <p class="mt-1 text-[0.8125rem] text-muted">
+              Paste this snippet into your website where the booking page should appear.
+            </p>
+            <textarea class="ui-input mt-3 resize-none font-mono text-[0.75rem]" rows="4"
+                      readonly data-embed-code></textarea>
+            <div class="mt-3 flex justify-end">
+              <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-embed-copy>
+                ${icon("copy", "size-4")}<span>Copy code</span>
+              </button>
+            </div>
+          </div>
+        </dialog>
       </article>`;
     })
     .join("");
@@ -209,7 +327,8 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
             ${button({ label: "Create event type", variant: "primary", icon: "plus" })}
           </div>
         </form>
-      </section>`,
+      </section>
+      ${EMBED_SCRIPT}`,
   });
 }
 

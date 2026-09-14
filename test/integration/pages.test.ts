@@ -67,6 +67,11 @@ describe("pages", () => {
     expect(html).toContain('rel="noopener"');
     expect(html).toContain('data-copy="/wan/consultation"');
     expect(html).toContain("Copy link");
+    expect(html).toContain("Embed");
+    expect(html).toContain('data-embed-open="embed-');
+    expect(html).toContain("Clone");
+    expect(html).toContain("Delete");
+    expect(html).toContain("ui-menu");
   });
 
   it("shows public page actions at the sidebar bottom", async () => {

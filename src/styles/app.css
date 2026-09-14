@@ -410,6 +410,32 @@
     @apply bg-subtle text-ink;
   }
 
+  /* --- Overflow menu and dialogs ---------------------------------------- */
+  .ui-menu {
+    @apply overflow-hidden rounded-lg border border-line bg-surface p-1 shadow-md;
+  }
+
+  .ui-menu-item {
+    @apply flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-body
+           transition-colors duration-100 hover:bg-subtle hover:text-ink;
+  }
+
+  .ui-menu-item-danger {
+    @apply text-danger hover:bg-danger-soft hover:text-danger;
+  }
+
+  .ui-dialog {
+    @apply w-full max-w-md rounded-xl border border-line bg-surface p-0 shadow-lg;
+  }
+
+  .ui-dialog::backdrop {
+    background: oklch(0.2 0.02 265 / 0.4);
+  }
+
+  .ui-dialog-body {
+    @apply p-5;
+  }
+
   /* --- App shell (host dashboard) -------------------------------------- */
   .app-sidebar {
     @apply fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-surface
