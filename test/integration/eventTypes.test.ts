@@ -185,4 +185,41 @@ describe("event types", () => {
     const { eventType: updated } = await patched.json<{ eventType: { is_active: number } }>();
     expect(updated.is_active).toBe(0);
   });
+
+  it("accepts and stores a buffer, rejecting out-of-range values", async () => {
+    const host = await createHost("wan");
+    const created = await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify({ name: "C", slug: "c", duration_minutes: 30, buffer_minutes: 15 }),
+    });
+    expect(created.status).toBe(201);
+    const { eventType } = await created.json<{ eventType: { buffer_minutes: number } }>();
+    expect(eventType.buffer_minutes).toBe(15);
+
+    const bad = await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify({ name: "D", slug: "d", duration_minutes: 30, buffer_minutes: 200 }),
+    });
+    expect(bad.status).toBe(400);
+  });
+
+  it("PATCH leaves the buffer unchanged when omitted", async () => {
+    const host = await createHost("wan");
+    const created = await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify({ name: "C", slug: "c", duration_minutes: 30, buffer_minutes: 15 }),
+    });
+    const { eventType } = await created.json<{ eventType: { id: number } }>();
+    const patched = await api(`/api/event-types/${eventType.id}`, {
+      method: "PATCH",
+      cookie: host.cookie,
+      body: JSON.stringify({ name: "Renamed" }),
+    });
+    expect(patched.status).toBe(200);
+    const { eventType: after } = await patched.json<{ eventType: { buffer_minutes: number } }>();
+    expect(after.buffer_minutes).toBe(15);
+  });
 });

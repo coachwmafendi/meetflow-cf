@@ -43,6 +43,10 @@ eventTypeRoutes.post("/", async (c) => {
     }
     const description = optionalString(body, "description");
     const durationMinutes = requireInt(body, "duration_minutes", { min: 5, max: 480 });
+    const bufferMinutes =
+      body.buffer_minutes === undefined
+        ? 0
+        : requireInt(body, "buffer_minutes", { min: 0, max: 120 });
 
     const locationType = String(body.location_type ?? "none");
     if (!isLocationType(locationType)) {
@@ -68,7 +72,7 @@ eventTypeRoutes.post("/", async (c) => {
       slug,
       description,
       durationMinutes,
-      bufferMinutes: body.buffer_minutes === undefined ? 0 : Number(body.buffer_minutes) || 0,
+      bufferMinutes,
       locationType,
       locationValue,
       now: nowIso(),
@@ -143,7 +147,10 @@ eventTypeRoutes.patch("/:id", async (c) => {
         body.duration_minutes === undefined
           ? current.duration_minutes
           : requireInt(body, "duration_minutes", { min: 5, max: 480 }),
-      bufferMinutes: body.buffer_minutes === undefined ? 0 : Number(body.buffer_minutes) || 0,
+      bufferMinutes:
+        body.buffer_minutes === undefined
+          ? current.buffer_minutes
+          : requireInt(body, "buffer_minutes", { min: 0, max: 120 }),
       locationType,
       locationValue,
       isActive:

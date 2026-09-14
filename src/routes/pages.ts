@@ -155,6 +155,7 @@ dashboard.post("/event-types", async (c) => {
   const form = await c.req.parseBody();
   const slug = String(form.slug ?? "").toLowerCase();
   const duration = Number(form.duration_minutes);
+  const bufferMinutes = Number(form.buffer_minutes);
   const locationType = isLocationType(String(form.location_type ?? ""))
     ? String(form.location_type)
     : "none";
@@ -168,7 +169,10 @@ dashboard.post("/event-types", async (c) => {
         slug,
         description: form.description ? String(form.description).trim() : null,
         durationMinutes: duration,
-        bufferMinutes: 0,
+        bufferMinutes:
+          Number.isInteger(bufferMinutes) && bufferMinutes >= 0 && bufferMinutes <= 120
+            ? bufferMinutes
+            : 0,
         locationType,
         locationValue: locationType === "none" ? null : locationValue,
         now: nowIso(),
@@ -210,6 +214,7 @@ dashboard.post("/event-types/:id", async (c) => {
   const name = String(form.name ?? "").trim();
   const slug = String(form.slug ?? "").toLowerCase();
   const duration = Number(form.duration_minutes);
+  const bufferMinutes = Number(form.buffer_minutes);
   const locationType = isLocationType(String(form.location_type ?? ""))
     ? String(form.location_type)
     : "none";
@@ -227,6 +232,7 @@ dashboard.post("/event-types/:id", async (c) => {
     name: name || current.name,
     slug: slug || current.slug,
     duration_minutes: Number.isInteger(duration) ? duration : current.duration_minutes,
+    buffer_minutes: Number.isInteger(bufferMinutes) ? bufferMinutes : current.buffer_minutes,
     description:
       form.description !== undefined ? String(form.description).trim() : current.description,
     location_type: locationType,
@@ -240,9 +246,12 @@ dashboard.post("/event-types/:id", async (c) => {
         ? "URL slug must be lowercase letters, digits and dashes."
         : !Number.isInteger(duration) || duration < 5 || duration > 480
           ? "Duration must be between 5 and 480 minutes."
-          : locationType !== "none" && !locationValue
-            ? "Location needs an address, link or number."
-            : null;
+          : form.buffer_minutes !== undefined &&
+              (!Number.isInteger(bufferMinutes) || bufferMinutes < 0 || bufferMinutes > 120)
+            ? "Buffer must be between 0 and 120 minutes."
+            : locationType !== "none" && !locationValue
+              ? "Location needs an address, link or number."
+              : null;
   if (invalid) return html(eventTypeEditPage(user, draft, bookings, invalid), 400);
 
   try {
@@ -251,7 +260,7 @@ dashboard.post("/event-types/:id", async (c) => {
       slug,
       description: form.description ? String(form.description).trim() : null,
       durationMinutes: duration,
-      bufferMinutes: 0,
+      bufferMinutes: Number.isInteger(bufferMinutes) ? bufferMinutes : current.buffer_minutes,
       locationType,
       locationValue: locationType === "none" ? null : locationValue,
       isActive: current.is_active,
