@@ -283,6 +283,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
       const path = `/${user.slug}/${e.slug}`;
       return `<article class="ui-card ui-rise group flex items-center justify-between gap-4 p-4 sm:p-5
                      transition-shadow duration-200 hover:shadow-md"
+               :class="open ? 'z-30' : ''" x-data="{ open: false }" @click.outside="open = false"
                style="animation-delay:${Math.min(i, 8) * 32}ms">
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
@@ -302,8 +303,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
           }
           <p class="mt-2.5 truncate font-mono text-[0.75rem] text-muted">${escapeHtml(path)}</p>
         </div>
-        <div class="relative flex shrink-0 items-center gap-2" x-data="{ open: false }"
-             @click.outside="open = false">
+        <div class="relative flex shrink-0 items-center gap-2">
           <a class="ui-btn ui-btn-ghost ui-btn-sm" href="${escapeHtml(path)}"
              target="_blank" rel="noopener">
             ${icon("external", "size-4")}<span>Open</span>
