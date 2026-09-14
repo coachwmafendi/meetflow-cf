@@ -402,7 +402,7 @@
 
   /* --- Sidebar navigation ---------------------------------------------- */
   .ui-side-link {
-    @apply flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium text-muted
+    @apply flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm font-medium text-muted
            transition-colors duration-100 hover:bg-subtle hover:text-ink;
   }
 

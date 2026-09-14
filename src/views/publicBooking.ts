@@ -95,7 +95,7 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
 
   return layout({
     title: eventType.name,
-    nav: "public",
+    nav: "none",
     width: "lg",
     data,
     body: `

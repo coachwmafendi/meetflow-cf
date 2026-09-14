@@ -23,47 +23,6 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/**
- * Copies the URL in a `data-copy` attribute when its button is clicked, then
- * swaps the button content for a "Copied" state. Delegated: works for any
- * button rendered anywhere on the page. Clipboard API with an execCommand
- * fallback for older browsers.
- */
-const COPY_LINK_SCRIPT = `
-  <script>
-    (function () {
-      document.addEventListener("click", function (event) {
-        var btn = event.target.closest("[data-copy]");
-        if (!btn) return;
-        var url = new URL(btn.getAttribute("data-copy"), window.location.origin).href;
-
-        function done() {
-          var original = btn.innerHTML;
-          btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="size-4"><path d="m4.5 12.5 5 5 10-11"/></svg><span>Copied</span>';
-          window.setTimeout(function () { btn.innerHTML = original; }, 1600);
-        }
-
-        function fallback() {
-          var ta = document.createElement("textarea");
-          ta.value = url;
-          ta.style.position = "fixed";
-          ta.style.opacity = "0";
-          document.body.appendChild(ta);
-          ta.select();
-          try { document.execCommand("copy"); } catch (e) {}
-          document.body.removeChild(ta);
-          done();
-        }
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(url).then(done, fallback);
-        } else {
-          fallback();
-        }
-      });
-    })();
-  </script>`;
-
 /** "Mon 14 Sep · 09:00" — weekday first, because hosts scan by day. */
 function whenParts(iso: string, timeZone: string): { day: string; clock: string } {
   const p = utcToZonedParts(new Date(iso), timeZone);
@@ -108,6 +67,7 @@ export function dashboardPage(
     activeNav: "/dashboard",
     hostName: user.name,
     hostAvatarKey: user.avatar_key,
+    hostSlug: user.slug,
     toast,
     body: `
       ${pageHeader({
@@ -210,6 +170,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
     activeNav: "/dashboard/event-types",
     hostName: user.name,
     hostAvatarKey: user.avatar_key,
+    hostSlug: user.slug,
     toast,
     body: `
       ${pageHeader({
@@ -248,8 +209,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
             ${button({ label: "Create event type", variant: "primary", icon: "plus" })}
           </div>
         </form>
-      </section>
-      ${COPY_LINK_SCRIPT}`,
+      </section>`,
   });
 }
 
@@ -284,6 +244,7 @@ export function eventTypeEditPage(
     activeNav: "/dashboard/event-types",
     hostName: user.name,
     hostAvatarKey: user.avatar_key,
+    hostSlug: user.slug,
     toast,
     body: `
       <a href="/dashboard/event-types" class="ui-btn ui-btn-ghost ui-btn-sm -ml-2 mb-4">
@@ -417,6 +378,7 @@ export function availabilityPage(
     activeNav: "/dashboard/availability",
     hostName: user.name,
     hostAvatarKey: user.avatar_key,
+    hostSlug: user.slug,
     toast,
     body: `
       ${pageHeader({
@@ -530,6 +492,7 @@ export function bookingsPage(
     activeNav: "/dashboard/bookings",
     hostName: user.name,
     hostAvatarKey: user.avatar_key,
+    hostSlug: user.slug,
     toast,
     body: `
       ${pageHeader({
@@ -571,6 +534,7 @@ export function settingsPage(user: PublicUser, error?: string, toast = ""): stri
     activeNav: "/dashboard/settings",
     hostName: user.name,
     hostAvatarKey: user.avatar_key,
+    hostSlug: user.slug,
     toast,
     body: `
       ${pageHeader({

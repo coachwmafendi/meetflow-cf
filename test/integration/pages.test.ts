@@ -69,6 +69,18 @@ describe("pages", () => {
     expect(html).toContain("Copy link");
   });
 
+  it("shows public page actions at the sidebar bottom", async () => {
+    const host = await createHost("wan");
+    const res = await SELF.fetch("https://example.com/dashboard", {
+      headers: { cookie: host.cookie },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Copy public page link");
+    expect(html).toContain('data-copy="/wan"');
+    expect(html).toContain("View public page");
+  });
+
   it("escapes host-controlled text", async () => {
     const host = await createHost("wan");
     await SELF.fetch("https://example.com/api/event-types", {

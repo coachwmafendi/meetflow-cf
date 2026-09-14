@@ -15,6 +15,8 @@ export interface LayoutOptions {
   hostAvatarKey?: string | null;
   /** One-line success message rendered as an auto-dismissing toast. */
   toast?: string;
+  /** Host's public username, used by the sidebar's public-page actions. */
+  hostSlug?: string;
   /** Constrains <main>. Auth and booking screens are narrower than the dashboard. */
   width?: "sm" | "md" | "lg";
 }
@@ -65,6 +67,46 @@ const THEME_TOGGLE_SCRIPT = `<script>
   })();
 </script>`;
 
+/**
+ * Copies the URL in a `data-copy` attribute when its button is clicked, then
+ * swaps the button content for a "Copied" state. Delegated: works for any
+ * button rendered anywhere on the page (sidebar and event-type cards).
+ */
+const COPY_LINK_SCRIPT = `
+  <script>
+    (function () {
+      document.addEventListener("click", function (event) {
+        var btn = event.target.closest("[data-copy]");
+        if (!btn) return;
+        var url = new URL(btn.getAttribute("data-copy"), window.location.origin).href;
+
+        function done() {
+          var original = btn.innerHTML;
+          btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="size-4"><path d="m4.5 12.5 5 5 10-11"/></svg><span>Copied</span>';
+          window.setTimeout(function () { btn.innerHTML = original; }, 1600);
+        }
+
+        function fallback() {
+          var ta = document.createElement("textarea");
+          ta.value = url;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand("copy"); } catch (e) {}
+          document.body.removeChild(ta);
+          done();
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(done, fallback);
+        } else {
+          fallback();
+        }
+      });
+    })();
+  </script>`;
+
 function themeToggle(): string {
   return `<button id="theme-toggle" type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2"
             aria-label="Change theme">
@@ -91,7 +133,6 @@ const HOST_NAV = [
   { href: "/dashboard/event-types", label: "Event Types", icon: "layers" },
   { href: "/dashboard/availability", label: "Availability", icon: "clock" },
   { href: "/dashboard/bookings", label: "Bookings", icon: "calendar" },
-  { href: "/dashboard/settings", label: "Settings", icon: "settings" },
 ] as const;
 
 const WIDTHS = { sm: "max-w-md", md: "max-w-3xl", lg: "max-w-5xl" } as const;
@@ -164,6 +205,30 @@ function hostLayout(options: LayoutOptions, dataScript: string): string {
             options.hostName ?? "",
           )}</span>
         </div>
+        <nav class="space-y-0.5" aria-label="Account">
+          ${
+            options.hostSlug
+              ? `<a href="/${escapeHtml(options.hostSlug)}" target="_blank" rel="noopener"
+                   @click="drawer = false" class="ui-side-link">
+                   ${icon("external", "size-[18px] shrink-0")}
+                   <span class="truncate">View public page</span>
+                 </a>
+                 <button type="button" class="ui-side-link" data-copy="/${escapeHtml(
+                   options.hostSlug,
+                 )}" @click="drawer = false">
+                   ${icon("copy", "size-[18px] shrink-0")}
+                   <span class="truncate">Copy public page link</span>
+                 </button>`
+              : ""
+          }
+          <a href="/dashboard/settings" @click="drawer = false"
+             class="ui-side-link ${
+               options.activeNav === "/dashboard/settings" ? "ui-side-link-active" : ""
+             }"${options.activeNav === "/dashboard/settings" ? ' aria-current="page"' : ""}>
+            ${icon("settings", "size-[18px] shrink-0")}
+            <span class="truncate">Settings</span>
+          </a>
+        </nav>
         <div class="flex items-center justify-between gap-1">
           ${themeToggle()}
           <form method="post" action="/logout">
@@ -189,6 +254,7 @@ function hostLayout(options: LayoutOptions, dataScript: string): string {
   }
   ${dataScript}
   ${THEME_TOGGLE_SCRIPT}
+  ${COPY_LINK_SCRIPT}
 </body>
 </html>`;
 }
