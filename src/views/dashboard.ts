@@ -114,12 +114,10 @@ export function dashboardPage(
         eyebrow: "Overview",
         title: `Good day, ${firstName}`,
         subtitle: `Your booking page is live at /${user.slug}`,
-        actionsHtml: button({
-          label: "View public page",
-          href: `/${user.slug}`,
-          icon: "globe",
-          size: "sm",
-        }),
+        actionsHtml: `<a class="ui-btn ui-btn-secondary ui-btn-sm" href="/${escapeHtml(user.slug)}"
+                     target="_blank" rel="noopener">
+          ${icon("external", "size-4")}<span>View public page</span>
+        </a>`,
       })}
 
       <div class="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -141,13 +139,10 @@ export function dashboardPage(
             icon: "calendar",
             title: "No upcoming bookings",
             body: "Once someone books a slot on your public page it will show up here.",
-            actionHtml: button({
-              label: "Open public page",
-              href: `/${user.slug}`,
-              variant: "secondary",
-              size: "sm",
-              icon: "globe",
-            }),
+            actionHtml: `<a class="ui-btn ui-btn-secondary ui-btn-sm" href="/${escapeHtml(user.slug)}"
+                              target="_blank" rel="noopener">
+          ${icon("external", "size-4")}<span>Open public page</span>
+        </a>`,
           }),
         })}
       </section>`,
