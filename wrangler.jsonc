@@ -43,7 +43,7 @@
   // Hourly sweep that queues 24-hour reminders.
   "triggers": { "crons": ["17 * * * *"] },
   "vars": {
-    "EMAIL_FROM": "MeetFlow <onboarding@resend.dev>",
+    "EMAIL_FROM": "MeetFlow <bookings@mailr.my>",
     "APP_URL": "https://meetflow.wmafendi.workers.dev"
   },
   "observability": { "enabled": true }
