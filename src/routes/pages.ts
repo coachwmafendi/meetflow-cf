@@ -16,7 +16,7 @@ import {
 import { findUserById, findUserBySlug, setAvatarKey, updateUserSettings } from "../db/users";
 import { listSavedLocations } from "../db/savedLocations";
 import { ImageError, avatarKey, validateAvatar } from "../lib/image";
-import { cancelPath } from "../lib/cancelToken";
+import { cancelPath, reschedulePath } from "../lib/cancelToken";
 import { toMinutes } from "../lib/slots";
 import { isoUtc, nowIso } from "../lib/time";
 import { isValidTimeZone, zonedDateString, zonedToUtc } from "../lib/timezone";
@@ -540,7 +540,11 @@ pageRoutes.get("/booking/:id/confirmed", async (c) => {
   if (!host || !eventType) return notFound();
   const href =
     booking.status === "confirmed" ? await cancelPath(booking.id, c.env.SESSION_SECRET) : undefined;
-  return html(confirmationPage(host, eventType, booking, href));
+  const reschedule =
+    booking.status === "confirmed"
+      ? await reschedulePath(booking.id, c.env.SESSION_SECRET)
+      : undefined;
+  return html(confirmationPage(host, eventType, booking, href, reschedule));
 });
 
 pageRoutes.get("/:username", async (c) => {

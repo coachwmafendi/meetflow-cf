@@ -268,6 +268,36 @@ describe("pages", () => {
     ]);
   });
 
+  it("shows a reschedule button on the confirmation page", async () => {
+    const host = await createHost("wan");
+    await SELF.fetch("https://example.com/api/availability", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({ rules: [{ day_of_week: 1, start_time: "09:00", end_time: "11:00" }] }),
+    });
+    await SELF.fetch("https://example.com/api/event-types", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 30 }),
+    });
+    const booked = await SELF.fetch("https://example.com/api/public/wan/consultation/book", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        start_at: "2026-10-05T01:00:00Z",
+        guest_name: "Ahmad",
+        guest_email: "ahmad@example.com",
+        timezone: "Asia/Kuala_Lumpur",
+      }),
+    });
+    expect(booked.status).toBe(201);
+    const { booking } = await booked.json<{ booking: { id: number } }>();
+    const res = await SELF.fetch(`https://example.com/booking/${booking.id}/confirmed`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Reschedule");
+  });
+
   it("logs out and clears the cookie", async () => {
     const host = await createHost("wan");
     const res = await SELF.fetch("https://example.com/logout", {

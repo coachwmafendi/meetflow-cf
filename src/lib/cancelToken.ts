@@ -46,3 +46,18 @@ export async function cancelUrl(
 ): Promise<string> {
   return `${appUrl}${await cancelPath(bookingId, secret)}`;
 }
+
+/** Same-origin path for the reschedule page, alongside the cancel path. */
+export async function reschedulePath(bookingId: number, secret: string): Promise<string> {
+  const token = await signCancelToken(bookingId, secret);
+  return `/booking/${bookingId}/reschedule?token=${encodeURIComponent(token)}`;
+}
+
+/** Absolute URL, for emails. */
+export async function rescheduleUrl(
+  appUrl: string,
+  bookingId: number,
+  secret: string,
+): Promise<string> {
+  return `${appUrl}${await reschedulePath(bookingId, secret)}`;
+}

@@ -663,6 +663,7 @@ export function confirmationPage(
   eventType: EventTypeRow,
   booking: BookingRow,
   cancelHref?: string,
+  rescheduleHref?: string,
 ): string {
   const p = utcToZonedParts(new Date(booking.start_at), booking.timezone);
   const end = utcToZonedParts(new Date(booking.end_at), booking.timezone);
@@ -721,6 +722,16 @@ export function confirmationPage(
             variant: "secondary",
             size: "sm",
           })}
+          ${
+            rescheduleHref
+              ? button({
+                  label: "Reschedule",
+                  href: rescheduleHref,
+                  variant: "secondary",
+                  size: "sm",
+                })
+              : ""
+          }
           ${
             cancelHref
               ? button({ label: "Cancel booking", href: cancelHref, variant: "ghost", size: "sm" })
