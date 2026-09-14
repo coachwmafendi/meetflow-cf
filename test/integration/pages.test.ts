@@ -79,6 +79,43 @@ describe("pages", () => {
     expect(html).toContain("Buffer after meeting");
   });
 
+  it("renders the search box wired to the event type cards", async () => {
+    const host = await createHost("wan");
+    await SELF.fetch("https://example.com/api/event-types", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({
+        name: `Q&A "deep" 'focus'`,
+        slug: "deep-focus",
+        duration_minutes: 30,
+        description: "Deep work block",
+      }),
+    });
+    const res = await SELF.fetch("https://example.com/dashboard/event-types", {
+      headers: { cookie: host.cookie },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('type="search"');
+    expect(html).toContain("Search event types");
+    expect(html).toContain('x-show="matches(items[0])"');
+    expect(html).toContain("noMatches()");
+    expect(html).toContain("Clear search");
+    // Quotes in the searchable fields survive as escaped JSON inside the attribute.
+    expect(html).toContain("&quot;deep&quot;");
+  });
+
+  it("omits the search box when there are no event types", async () => {
+    const host = await createHost("wan");
+    const res = await SELF.fetch("https://example.com/dashboard/event-types", {
+      headers: { cookie: host.cookie },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).not.toContain('type="search"');
+    expect(html).toContain("No event types yet");
+  });
+
   it("shows public page actions at the sidebar bottom", async () => {
     const host = await createHost("wan");
     const res = await SELF.fetch("https://example.com/dashboard", {

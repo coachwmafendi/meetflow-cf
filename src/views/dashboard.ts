@@ -284,6 +284,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
       return `<article class="ui-card ui-rise group flex items-center justify-between gap-4 p-4 sm:p-5
                      transition-shadow duration-200 hover:shadow-md"
                :class="open ? 'z-30' : ''" x-data="{ open: false }" @click.outside="open = false"
+               x-show="matches(items[${i}])"
                style="animation-delay:${Math.min(i, 8) * 32}ms">
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
@@ -369,8 +370,43 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
     })
     .join("");
 
+  const items = eventTypes.map((e) => ({
+    name: e.name,
+    slug: e.slug,
+    description: e.description ?? "",
+  }));
+
   const list = eventTypes.length
-    ? `<div class="mb-8 grid gap-3">${cards}</div>`
+    ? `<div class="mb-8" x-data="{
+        q: '',
+        items: ${escapeHtml(JSON.stringify(items))},
+        matches(item) {
+          var haystack = (item.name + ' ' + item.slug + ' ' + item.description).toLowerCase();
+          return haystack.includes(this.q.trim().toLowerCase());
+        },
+        noMatches() {
+          return this.q.trim() !== '' && !this.items.some((item) => this.matches(item));
+        }
+      }">
+        <div class="relative mb-4 max-w-xs">
+          <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
+            ${icon("search", "size-4")}
+          </span>
+          <input type="search" class="ui-input pl-9" placeholder="Search event types…"
+                 aria-label="Search event types" x-model="q">
+        </div>
+        <div class="grid gap-3">${cards}</div>
+        <div class="ui-card" x-show="noMatches()" x-cloak>
+          ${emptyState({
+            icon: "search",
+            title: "No event types match",
+            body: "Nothing matches your search. Try different words or clear it.",
+            actionHtml: `<button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" @click="q = ''">
+              Clear search
+            </button>`,
+          })}
+        </div>
+      </div>`
     : `<div class="ui-card mb-8">${emptyState({
         icon: "layers",
         title: "No event types yet",
