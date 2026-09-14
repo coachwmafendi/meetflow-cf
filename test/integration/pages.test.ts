@@ -76,6 +76,7 @@ describe("pages", () => {
     expect(html).toContain("ui-menu");
     expect(html).toContain('data-dialog-open="create-event-type"');
     expect(html).toContain('id="create-event-type"');
+    expect(html).toContain("Buffer after meeting");
   });
 
   it("shows public page actions at the sidebar bottom", async () => {
@@ -119,6 +120,40 @@ describe("pages", () => {
     expect(html).toContain('value="bad slug!"');
     expect(html).toContain('value="60"');
     expect(html).toContain("typed desc");
+    expect(html).toContain('name="buffer_minutes"');
+  });
+
+  it("accepts an empty buffer field on the edit form", async () => {
+    const host = await createHost("wan");
+    const created = await SELF.fetch("https://example.com/api/event-types", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({
+        name: "Consultation",
+        slug: "consultation",
+        duration_minutes: 30,
+        buffer_minutes: 10,
+      }),
+    });
+    const { eventType } = await created.json<{ eventType: { id: number } }>();
+    const res = await SELF.fetch(`https://example.com/dashboard/event-types/${eventType.id}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        cookie: host.cookie,
+      },
+      body: new URLSearchParams({
+        name: "Consultation",
+        slug: "consultation",
+        duration_minutes: "30",
+        description: "",
+        location_type: "none",
+        location_value: "",
+        buffer_minutes: "",
+      }).toString(),
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
   });
 
   it("shows the meeting location on the booking page", async () => {

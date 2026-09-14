@@ -40,6 +40,7 @@ const EMBED_SCRIPT = `
           name: '',
           slug: '',
           duration: 30,
+          buffer: 0,
           description: '',
           locationType: 'none',
           locationValue: '',
@@ -100,6 +101,7 @@ const EMBED_SCRIPT = `
                   name: this.name.trim(),
                   slug: this.slug.trim().toLowerCase(),
                   duration_minutes: Number(this.duration),
+                  buffer_minutes: Number(this.buffer),
                   description: this.description.trim() || null,
                   location_type: this.locationType,
                   location_value: this.locationValueToSend() || null,
@@ -436,6 +438,12 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
               <p class="ui-hint">Minutes. Slots are generated on this interval.</p>
             </div>
             <div class="ui-fieldset">
+              <label class="ui-label" for="et_buffer">Buffer after meeting</label>
+              <input class="ui-input font-mono" id="et_buffer" type="number" x-model="buffer"
+                     min="0" max="120" step="5">
+              <p class="ui-hint">Minutes of breathing room after each booking. 0 = back-to-back.</p>
+            </div>
+            <div class="ui-fieldset">
               <label class="ui-label" for="et_description">
                 Description <span class="font-normal text-muted">(optional)</span>
               </label>
@@ -555,6 +563,14 @@ export function eventTypeEditPage(
             value: String(eventType.duration_minutes),
             hint: "Minutes. Existing bookings keep their original length.",
             attrsHtml: 'min="5" max="480" step="5"',
+          })}
+          ${field({
+            name: "buffer_minutes",
+            label: "Buffer after meeting",
+            type: "number",
+            value: String(eventType.buffer_minutes),
+            hint: "Minutes of breathing room after each booking.",
+            attrsHtml: 'min="0" max="120" step="5"',
           })}
           ${field({
             name: "description",
