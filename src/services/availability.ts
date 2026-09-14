@@ -1,5 +1,5 @@
 import { listRules, listRulesForDay } from "../db/availability";
-import { listConfirmedBetween } from "../db/bookings";
+import { listConfirmedBetween, type BusyInterval } from "../db/bookings";
 import {
   generateSlotStarts,
   removeBusy,
@@ -11,6 +11,25 @@ import {
 } from "../lib/slots";
 import { addMinutes, isoUtc } from "../lib/time";
 import { dayOfWeek, zonedDateString, zonedToUtc } from "../lib/timezone";
+
+/**
+ * Busy windows for the host, with same-type bookings widened by the buffer on
+ * BOTH sides. Symmetric with the insert guard: a candidate meeting must not
+ * start inside a prior meeting's trailing buffer, and must not end inside a
+ * later meeting's leading buffer — so the grid never shows a slot the guard
+ * would reject.
+ */
+function busyIntervals(
+  rows: BusyInterval[],
+  eventTypeId: number,
+  bufferMinutes: number,
+): Interval[] {
+  return rows.map((b) => ({
+    startMs:
+      Date.parse(b.start_at) - (b.event_type_id === eventTypeId ? bufferMinutes * 60_000 : 0),
+    endMs: Date.parse(b.end_at) + (b.event_type_id === eventTypeId ? bufferMinutes * 60_000 : 0),
+  }));
+}
 
 export interface SlotQuery {
   hostId: number;
@@ -85,11 +104,7 @@ export async function getDaySlots(db: D1Database, q: SlotQuery): Promise<DaySlot
     isoUtc(new Date(dayStart)),
     isoUtc(new Date(dayEnd)),
   );
-  const busy: Interval[] = busyRows.map((b) => ({
-    startMs: Date.parse(b.start_at),
-    endMs:
-      Date.parse(b.end_at) + (b.event_type_id === q.eventTypeId ? q.bufferMinutes * 60_000 : 0),
-  }));
+  const busy = busyIntervals(busyRows, q.eventTypeId, q.bufferMinutes);
 
   const toSlot = (slot: Interval): Slot => ({
     startAt: isoUtc(new Date(slot.startMs)),
@@ -151,11 +166,7 @@ export async function getMonthFreeDays(db: D1Database, q: MonthQuery): Promise<s
     isoUtc(new Date(minMs)),
     isoUtc(new Date(maxMs)),
   );
-  const busy: Interval[] = busyRows.map((b) => ({
-    startMs: Date.parse(b.start_at),
-    endMs:
-      Date.parse(b.end_at) + (b.event_type_id === q.eventTypeId ? q.bufferMinutes * 60_000 : 0),
-  }));
+  const busy = busyIntervals(busyRows, q.eventTypeId, q.bufferMinutes);
 
   const freeDays: string[] = [];
   for (const [ymd, slots] of byDate) {

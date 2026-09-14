@@ -19,8 +19,11 @@ Buffer applies only to bookings **of the same event type**:
 
 - `listConfirmedBetween` selects `event_type_id` alongside `start_at`/`end_at`
   (`BusyInterval` gains `event_type_id`).
-- `getDaySlots` / `getMonthFreeDays` expand each busy interval's `endMs` by
-  `bufferMinutes` **iff** `busy.event_type_id === query.eventTypeId`.
+- `getDaySlots` / `getMonthFreeDays` widen each busy interval of a same-type
+  booking on **both sides** by `bufferMinutes` (`start − buffer` … `end +
+  buffer`). Symmetric with the insert guard, so the grid never shows a slot the
+  guard would reject: a candidate must not start inside a prior meeting's
+  trailing buffer, nor end inside a later meeting's leading buffer.
   Bookings of other types still block by their raw duration (the host is
   literally busy; the buffer is only a pacing preference).
 - The slot grid itself stays dense (duration step) — slots disappear only

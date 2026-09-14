@@ -137,6 +137,29 @@ describe("getSlotsForDate", () => {
     expect(slots.map((s) => s.startAt)).toEqual(["2026-09-21T02:00:00Z", "2026-09-21T02:30:00Z"]);
   });
 
+  it("blocks a slot that ends inside a later meeting's leading buffer", async () => {
+    const { host, eventTypeId } = await seed();
+    const now = "2026-09-01T00:00:00Z";
+    // Booking at 09:30-10:00 local. Symmetric buffer: 09:00 slot ends exactly
+    // when it starts, and 10:00 slot starts inside its trailing buffer — only
+    // 10:30 local survives.
+    await env.DB.prepare(
+      `INSERT INTO bookings (user_id,event_type_id,guest_name,guest_email,start_at,end_at,timezone,status,created_at,updated_at)
+       VALUES (?,?,'G','g@example.com','2026-09-21T01:30:00Z','2026-09-21T02:00:00Z','UTC','confirmed',?,?)`,
+    )
+      .bind(host.id, eventTypeId, now, now)
+      .run();
+
+    const slots = await getSlotsForDate(env.DB, {
+      ...BASE,
+      hostId: host.id,
+      eventTypeId,
+      bufferMinutes: 15,
+      dateYmd: "2026-09-21",
+    });
+    expect(slots.map((s) => s.startAt)).toEqual(["2026-09-21T02:30:00Z"]);
+  });
+
   it("does not expand other event types' bookings", async () => {
     const { host, eventTypeId } = await seed();
     const now = "2026-09-01T00:00:00Z";
