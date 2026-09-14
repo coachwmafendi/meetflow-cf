@@ -88,6 +88,37 @@ describe("pages", () => {
     expect(html).toContain("View public page");
   });
 
+  it("preserves typed values when an edit fails validation", async () => {
+    const host = await createHost("wan");
+    const created = await SELF.fetch("https://example.com/api/event-types", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 30 }),
+    });
+    const { eventType } = await created.json<{ eventType: { id: number } }>();
+
+    const res = await SELF.fetch(`https://example.com/dashboard/event-types/${eventType.id}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        cookie: host.cookie,
+      },
+      body: new URLSearchParams({
+        name: "Typed Name",
+        slug: "bad slug!",
+        duration_minutes: "60",
+        description: "typed desc",
+      }).toString(),
+    });
+    expect(res.status).toBe(400);
+    const html = await res.text();
+    expect(html).toContain("URL slug must be lowercase");
+    expect(html).toContain("Typed Name");
+    expect(html).toContain('value="bad slug!"');
+    expect(html).toContain('value="60"');
+    expect(html).toContain("typed desc");
+  });
+
   it("escapes host-controlled text", async () => {
     const host = await createHost("wan");
     await SELF.fetch("https://example.com/api/event-types", {

@@ -47,7 +47,7 @@ import {
   confirmationPage,
   profilePage,
 } from "../views/publicBooking";
-import type { AppEnv } from "../types";
+import type { AppEnv, EventTypeRow } from "../types";
 
 export const pageRoutes = new Hono<AppEnv>();
 
@@ -196,6 +196,17 @@ dashboard.post("/event-types/:id", async (c) => {
   const duration = Number(form.duration_minutes);
   const bookings = await countBookingsForEventType(c.env.DB, id);
 
+  // Re-render with what the host typed, so a validation error never wipes
+  // the form. Unparseable values fall back to the stored row.
+  const draft: EventTypeRow = {
+    ...current,
+    name: name || current.name,
+    slug: slug || current.slug,
+    duration_minutes: Number.isInteger(duration) ? duration : current.duration_minutes,
+    description:
+      form.description !== undefined ? String(form.description).trim() : current.description,
+  };
+
   const invalid =
     !name || name.length > 100
       ? "Name is required."
@@ -204,7 +215,7 @@ dashboard.post("/event-types/:id", async (c) => {
         : !Number.isInteger(duration) || duration < 5 || duration > 480
           ? "Duration must be between 5 and 480 minutes."
           : null;
-  if (invalid) return html(eventTypeEditPage(user, current, bookings, invalid), 400);
+  if (invalid) return html(eventTypeEditPage(user, draft, bookings, invalid), 400);
 
   try {
     await updateEventType(c.env.DB, id, user.id, {
@@ -218,7 +229,7 @@ dashboard.post("/event-types/:id", async (c) => {
   } catch (err) {
     if (!String(err).includes("UNIQUE")) throw err;
     return html(
-      eventTypeEditPage(user, current, bookings, "You already have an event type with that URL."),
+      eventTypeEditPage(user, draft, bookings, "You already have an event type with that URL."),
       409,
     );
   }
