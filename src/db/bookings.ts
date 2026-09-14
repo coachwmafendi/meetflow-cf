@@ -104,6 +104,100 @@ export async function insertBookingIfFree(
   }
 }
 
+export interface RescheduleInput {
+  oldBookingId: number;
+  userId: number;
+  eventTypeId: number;
+  guestName: string;
+  guestEmail: string;
+  startAt: string;
+  endAt: string;
+  timezone: string;
+  notes: string | null;
+  now: string;
+  bufferMinutes: number;
+}
+
+/**
+ * Atomic reschedule: conditionally insert the new booking and cancel the old
+ * one. Returns the new row, or null when either side fails (slot taken, or the
+ * old booking is no longer confirmed). If the old booking was cancelled in a
+ * race, the freshly inserted row is rolled back so the guest is never left
+ * with two confirmed bookings.
+ */
+export async function rescheduleBookingIfFree(
+  db: D1Database,
+  input: RescheduleInput,
+): Promise<BookingRow | null> {
+  const bufferedEnd = isoUtc(addMinutes(new Date(input.endAt), input.bufferMinutes));
+  const bufferedStart = isoUtc(addMinutes(new Date(input.startAt), -input.bufferMinutes));
+
+  const newBooking = await db
+    .prepare(
+      `INSERT INTO bookings (
+         user_id, event_type_id, guest_name, guest_email,
+         start_at, end_at, timezone, status, notes, created_at, updated_at
+       )
+       SELECT ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, ?
+       WHERE NOT EXISTS (
+         SELECT 1 FROM bookings
+         WHERE user_id = ?
+           AND status = 'confirmed'
+           AND start_at < ?
+           AND end_at > ?
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM bookings
+         WHERE user_id = ?
+           AND status = 'confirmed'
+           AND event_type_id = ?
+           AND start_at < ?
+           AND end_at > ?
+       )
+       RETURNING *`,
+    )
+    .bind(
+      input.userId,
+      input.eventTypeId,
+      input.guestName,
+      input.guestEmail,
+      input.startAt,
+      input.endAt,
+      input.timezone,
+      input.notes,
+      input.now,
+      input.now,
+      input.userId,
+      input.endAt,
+      input.startAt,
+      input.userId,
+      input.eventTypeId,
+      bufferedEnd,
+      bufferedStart,
+    )
+    .first<BookingRow>();
+  if (!newBooking) return null;
+
+  const cancelled = await db
+    .prepare(
+      `UPDATE bookings SET status = 'cancelled', updated_at = ?
+       WHERE id = ? AND user_id = ? AND status = 'confirmed'
+       RETURNING id`,
+    )
+    .bind(input.now, input.oldBookingId, input.userId)
+    .first<{ id: number }>();
+  if (!cancelled) {
+    // Old booking was already cancelled — undo the insert we just made.
+    await db
+      .prepare("UPDATE bookings SET status = 'cancelled', updated_at = ? WHERE id = ?")
+      .bind(input.now, newBooking.id)
+      .run();
+    return null;
+  }
+
+  return newBooking;
+}
+
 export async function getBookingOwned(
   db: D1Database,
   id: number,
