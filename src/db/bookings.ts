@@ -119,11 +119,13 @@ export interface RescheduleInput {
 }
 
 /**
- * Atomic reschedule: conditionally insert the new booking and cancel the old
- * one. Returns the new row, or null when either side fails (slot taken, or the
- * old booking is no longer confirmed). If the old booking was cancelled in a
- * race, the freshly inserted row is rolled back so the guest is never left
- * with two confirmed bookings.
+ * Reschedule: conditionally insert the new booking, then cancel the old one.
+ * D1 has no interactive transactions, so the two statements run sequentially —
+ * the insert happens first, and only a successful insert is followed by the
+ * cancel, which means a taken slot never touches the old booking. If the old
+ * booking was cancelled in a race, the freshly inserted row is rolled back so
+ * the guest is never left with two confirmed bookings. (A crash between the
+ * two statements could leave both confirmed; the window is one statement.)
  */
 export async function rescheduleBookingIfFree(
   db: D1Database,
@@ -132,9 +134,11 @@ export async function rescheduleBookingIfFree(
   const bufferedEnd = isoUtc(addMinutes(new Date(input.endAt), input.bufferMinutes));
   const bufferedStart = isoUtc(addMinutes(new Date(input.startAt), -input.bufferMinutes));
 
-  const newBooking = await db
-    .prepare(
-      `INSERT INTO bookings (
+  let newBooking: BookingRow | null;
+  try {
+    newBooking = await db
+      .prepare(
+        `INSERT INTO bookings (
          user_id, event_type_id, guest_name, guest_email,
          start_at, end_at, timezone, status, notes, created_at, updated_at
        )
@@ -155,27 +159,32 @@ export async function rescheduleBookingIfFree(
            AND end_at > ?
        )
        RETURNING *`,
-    )
-    .bind(
-      input.userId,
-      input.eventTypeId,
-      input.guestName,
-      input.guestEmail,
-      input.startAt,
-      input.endAt,
-      input.timezone,
-      input.notes,
-      input.now,
-      input.now,
-      input.userId,
-      input.endAt,
-      input.startAt,
-      input.userId,
-      input.eventTypeId,
-      bufferedEnd,
-      bufferedStart,
-    )
-    .first<BookingRow>();
+      )
+      .bind(
+        input.userId,
+        input.eventTypeId,
+        input.guestName,
+        input.guestEmail,
+        input.startAt,
+        input.endAt,
+        input.timezone,
+        input.notes,
+        input.now,
+        input.now,
+        input.userId,
+        input.endAt,
+        input.startAt,
+        input.userId,
+        input.eventTypeId,
+        bufferedEnd,
+        bufferedStart,
+      )
+      .first<BookingRow>();
+  } catch (err) {
+    // Partial unique index fired — same host, same start, already confirmed.
+    if (String(err).includes("UNIQUE")) return null;
+    throw err;
+  }
   if (!newBooking) return null;
 
   const cancelled = await db
