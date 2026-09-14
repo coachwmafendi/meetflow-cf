@@ -8,7 +8,7 @@ export interface LayoutOptions {
   body: string;
   /** Rendered inside a <script type="application/json" id="page-data"> tag. */
   data?: unknown;
-  nav?: "host" | "public" | "none";
+  nav?: "host" | "none";
   activeNav?: string;
   hostName?: string;
   /** R2 object key for the host's avatar, shown in the sidebar. */
@@ -259,12 +259,6 @@ function hostLayout(options: LayoutOptions, dataScript: string): string {
 </html>`;
 }
 
-function publicHeader(): string {
-  return `<header class="border-b border-line bg-surface/85 backdrop-blur-md">
-      <div class="mx-auto flex h-14 max-w-3xl items-center px-5 sm:px-6">${wordmark("/")}</div>
-    </header>`;
-}
-
 export function layout(options: LayoutOptions): string {
   const dataScript = options.data
     ? `<script type="application/json" id="page-data">${JSON.stringify(options.data).replace(
@@ -274,8 +268,6 @@ export function layout(options: LayoutOptions): string {
     : "";
 
   if (options.nav === "host") return hostLayout(options, dataScript);
-
-  const header = options.nav === "public" ? publicHeader() : "";
 
   return `<!doctype html>
 <html lang="en" class="h-full">
@@ -291,7 +283,6 @@ export function layout(options: LayoutOptions): string {
   <script defer src="/vendor/alpine.min.js"></script>
 </head>
 <body class="flex min-h-full flex-col bg-canvas text-body antialiased">
-  ${header}
   <main class="mx-auto w-full ${
     WIDTHS[options.width ?? "lg"]
   } flex-1 px-5 py-8 sm:px-6 sm:py-10">${options.body}</main>

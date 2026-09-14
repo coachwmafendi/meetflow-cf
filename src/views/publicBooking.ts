@@ -52,7 +52,7 @@ export function profilePage(host: PublicUser, eventTypes: EventTypeRow[]): strin
 
   return layout({
     title: host.name,
-    nav: "public",
+    nav: "none",
     width: "md",
     body: `
       <div class="mx-auto max-w-lg">
@@ -518,7 +518,7 @@ export function cancelConfirmPage(
 
   return layout({
     title: "Cancel booking",
-    nav: "public",
+    nav: "none",
     width: "md",
     body: `
       <div class="mx-auto max-w-md ui-rise">
@@ -556,7 +556,7 @@ export function cancelConfirmPage(
 export function cancelledPage(host: PublicUser, eventType: EventTypeRow): string {
   return layout({
     title: "Booking cancelled",
-    nav: "public",
+    nav: "none",
     width: "md",
     body: `
       <div class="mx-auto max-w-md ui-rise text-center">
@@ -586,7 +586,7 @@ export function cancelledPage(host: PublicUser, eventType: EventTypeRow): string
 export function cancelUnavailablePage(message: string): string {
   return layout({
     title: "Cannot cancel",
-    nav: "public",
+    nav: "none",
     width: "md",
     body: `
       <div class="mx-auto max-w-md ui-rise text-center">
@@ -641,7 +641,7 @@ export function confirmationPage(
 
   return layout({
     title: "Booking confirmed",
-    nav: "public",
+    nav: "none",
     width: "md",
     body: `
       <div class="mx-auto max-w-md ui-rise">
