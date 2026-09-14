@@ -35,7 +35,53 @@ const EMBED_SCRIPT = `
         return '<iframe src="' + url + '" width="100%" height="600" style="border:0" loading="lazy" title="Booking page"></iframe>';
       }
 
+      window.createEventTypeForm = function () {
+        return {
+          name: '',
+          slug: '',
+          duration: 30,
+          description: '',
+          error: '',
+          submitting: false,
+
+          async submit() {
+            this.submitting = true;
+            this.error = '';
+            try {
+              var res = await fetch('/api/event-types', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                  name: this.name.trim(),
+                  slug: this.slug.trim().toLowerCase(),
+                  duration_minutes: Number(this.duration),
+                  description: this.description.trim() || null,
+                }),
+              });
+              if (res.status === 201) {
+                window.location.href = '/dashboard/event-types?toast=' +
+                  encodeURIComponent('Event type created');
+                return;
+              }
+              var body = await res.json().catch(function () { return {}; });
+              this.error = body.error || 'Could not create the event type.';
+              this.submitting = false;
+            } catch (e) {
+              this.error = 'Could not create the event type. Please try again.';
+              this.submitting = false;
+            }
+          },
+        };
+      };
+
       document.addEventListener("click", function (event) {
+        var dialogBtn = event.target.closest("[data-dialog-open]");
+        if (dialogBtn) {
+          var target = document.getElementById(dialogBtn.getAttribute("data-dialog-open"));
+          if (target) target.showModal();
+          return;
+        }
+
         var openBtn = event.target.closest("[data-embed-open]");
         if (openBtn) {
           var dialog = document.getElementById(openBtn.getAttribute("data-embed-open"));
@@ -280,6 +326,10 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
         icon: "layers",
         title: "No event types yet",
         body: "An event type is a meeting people can book — a name, a length, and a URL.",
+        actionHtml: `<button type="button" class="ui-btn ui-btn-primary ui-btn-sm"
+                             data-dialog-open="create-event-type">
+          ${icon("plus", "size-4")}<span>New event type</span>
+        </button>`,
       })}</div>`;
 
   return layout({
@@ -295,39 +345,65 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
         eyebrow: "Bookable meetings",
         title: "Event types",
         subtitle: "Each one gets its own public booking link.",
+        actionsHtml: `<button type="button" class="ui-btn ui-btn-primary ui-btn-sm"
+                              data-dialog-open="create-event-type">
+          ${icon("plus", "size-4")}<span>New event type</span>
+        </button>`,
       })}
 
       ${list}
 
-      <section class="ui-card ui-card-pad">
-        <h2 class="mb-4 text-sm font-semibold text-ink">Create an event type</h2>
-        <form class="grid gap-4 sm:grid-cols-2" method="post" action="/dashboard/event-types">
-          ${field({ name: "name", label: "Name", placeholder: "Consultation" })}
-          ${field({
-            name: "slug",
-            label: "URL slug",
-            placeholder: "consultation",
-            hint: `Public link: /${user.slug}/…`,
-          })}
-          ${field({
-            name: "duration_minutes",
-            label: "Duration",
-            type: "number",
-            value: "30",
-            hint: "Minutes. Slots are generated on this interval.",
-            attrsHtml: 'min="5" max="480" step="5"',
-          })}
-          ${field({
-            name: "description",
-            label: "Description",
-            required: false,
-            placeholder: "A 30-minute intro call",
-          })}
-          <div class="sm:col-span-2">
-            ${button({ label: "Create event type", variant: "primary", icon: "plus" })}
+      <dialog id="create-event-type" class="ui-dialog" aria-labelledby="create-event-type-title">
+        <div class="ui-dialog-body" x-data="createEventTypeForm()">
+          <div class="flex items-center justify-between gap-4">
+            <h3 id="create-event-type-title" class="text-sm font-semibold text-ink">
+              Create event type
+            </h3>
+            <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2"
+                    data-dialog-close aria-label="Close">
+              ${icon("x", "size-4")}
+            </button>
           </div>
-        </form>
-      </section>
+
+          <template x-if="error">
+            <div class="ui-alert ui-alert-danger mt-3" role="alert">
+              ${icon("alert", "size-4 shrink-0 mt-px")}<span x-text="error"></span>
+            </div>
+          </template>
+
+          <form class="mt-4 space-y-4" @submit.prevent="submit()">
+            <div class="ui-fieldset">
+              <label class="ui-label" for="et_name">Name</label>
+              <input class="ui-input" id="et_name" x-model="name" placeholder="Consultation" required>
+            </div>
+            <div class="ui-fieldset">
+              <label class="ui-label" for="et_slug">URL slug</label>
+              <input class="ui-input font-mono" id="et_slug" x-model="slug" placeholder="consultation"
+                     pattern="[a-z0-9]([a-z0-9-]{0,58}[a-z0-9])?" required>
+              <p class="ui-hint">Public link: /${escapeHtml(user.slug)}/…</p>
+            </div>
+            <div class="ui-fieldset">
+              <label class="ui-label" for="et_duration">Duration</label>
+              <input class="ui-input font-mono" id="et_duration" type="number" x-model="duration"
+                     min="5" max="480" step="5" required>
+              <p class="ui-hint">Minutes. Slots are generated on this interval.</p>
+            </div>
+            <div class="ui-fieldset">
+              <label class="ui-label" for="et_description">
+                Description <span class="font-normal text-muted">(optional)</span>
+              </label>
+              <textarea class="ui-input resize-y" id="et_description" rows="3" x-model="description"
+                        placeholder="A 30-minute intro call"></textarea>
+            </div>
+            <div class="flex justify-end gap-2 pt-1">
+              <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm" data-dialog-close>Cancel</button>
+              <button class="ui-btn ui-btn-primary ui-btn-sm" type="submit" :disabled="submitting">
+                <span x-text="submitting ? 'Creating…' : 'Create'"></span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </dialog>
       ${EMBED_SCRIPT}`,
   });
 }

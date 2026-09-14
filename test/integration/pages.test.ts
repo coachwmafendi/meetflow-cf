@@ -74,6 +74,8 @@ describe("pages", () => {
     expect(html).toContain("Clone");
     expect(html).toContain("Delete");
     expect(html).toContain("ui-menu");
+    expect(html).toContain('data-dialog-open="create-event-type"');
+    expect(html).toContain('id="create-event-type"');
   });
 
   it("shows public page actions at the sidebar bottom", async () => {
