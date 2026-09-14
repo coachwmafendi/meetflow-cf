@@ -8,6 +8,7 @@ import {
   updateEventType,
 } from "../db/eventTypes";
 import { nowIso } from "../lib/time";
+import { listSavedLocations } from "../db/savedLocations";
 import {
   ValidationError,
   isEventSlug,
@@ -80,6 +81,13 @@ eventTypeRoutes.post("/", async (c) => {
     }
     throw err;
   }
+});
+
+eventTypeRoutes.get("/locations", async (c) => {
+  const type = c.req.query("type") ?? "";
+  if (!isLocationType(type) || type === "none") return c.json({ locations: [] });
+  const rows = await listSavedLocations(c.env.DB, c.get("user").id, type);
+  return c.json({ locations: rows.map((r) => r.location_value) });
 });
 
 eventTypeRoutes.get("/:id", async (c) => {

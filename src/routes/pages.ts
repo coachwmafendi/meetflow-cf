@@ -14,6 +14,7 @@ import {
   updateEventType,
 } from "../db/eventTypes";
 import { findUserById, findUserBySlug, setAvatarKey, updateUserSettings } from "../db/users";
+import { listSavedLocations } from "../db/savedLocations";
 import { ImageError, avatarKey, validateAvatar } from "../lib/image";
 import { cancelPath } from "../lib/cancelToken";
 import { toMinutes } from "../lib/slots";
@@ -187,7 +188,15 @@ dashboard.get("/event-types/:id", async (c) => {
   const eventType = await getEventTypeOwned(c.env.DB, id, user.id);
   if (!eventType) return notFound();
   const bookings = await countBookingsForEventType(c.env.DB, id);
-  return html(eventTypeEditPage(user, eventType, bookings, undefined, readToast(c)));
+  const savedLocations =
+    eventType.location_type === "google_meet" || eventType.location_type === "zoom"
+      ? (await listSavedLocations(c.env.DB, user.id, eventType.location_type)).map(
+          (r) => r.location_value,
+        )
+      : [];
+  return html(
+    eventTypeEditPage(user, eventType, bookings, undefined, readToast(c), savedLocations),
+  );
 });
 
 dashboard.post("/event-types/:id", async (c) => {
@@ -203,7 +212,11 @@ dashboard.post("/event-types/:id", async (c) => {
   const locationType = isLocationType(String(form.location_type ?? ""))
     ? String(form.location_type)
     : "none";
-  const locationValue = normalizeLocationValue(locationType, String(form.location_value ?? ""));
+  const savedChoice = String(form.saved_location_value ?? "");
+  const locationValue = normalizeLocationValue(
+    locationType,
+    savedChoice && savedChoice !== "__custom__" ? savedChoice : String(form.location_value ?? ""),
+  );
   const bookings = await countBookingsForEventType(c.env.DB, id);
 
   // Re-render with what the host typed, so a validation error never wipes

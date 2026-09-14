@@ -1,4 +1,20 @@
+import { upsertSavedLocation } from "./savedLocations";
 import type { EventTypeRow } from "../types";
+
+const LINK_TYPES = ["google_meet", "zoom"];
+
+/** Meeting links are remembered so later forms can offer them as choices. */
+async function rememberLocation(
+  db: D1Database,
+  userId: number,
+  locationType: string,
+  locationValue: string | null,
+  now: string,
+): Promise<void> {
+  if (LINK_TYPES.includes(locationType) && locationValue) {
+    await upsertSavedLocation(db, userId, locationType, locationValue, now);
+  }
+}
 
 export async function listEventTypes(db: D1Database, userId: number): Promise<EventTypeRow[]> {
   const { results } = await db
@@ -81,6 +97,7 @@ export async function insertEventType(
     )
     .first<EventTypeRow>();
   if (!row) throw new Error("Failed to insert event type");
+  await rememberLocation(db, input.userId, input.locationType, input.locationValue, input.now);
   return row;
 }
 
@@ -101,7 +118,7 @@ export async function updateEventType(
   userId: number,
   input: UpdateEventTypeInput,
 ): Promise<EventTypeRow | null> {
-  return db
+  const row = await db
     .prepare(
       `UPDATE event_types
        SET name = ?, slug = ?, description = ?, duration_minutes = ?,
@@ -122,6 +139,8 @@ export async function updateEventType(
       userId,
     )
     .first<EventTypeRow>();
+  if (row) await rememberLocation(db, userId, input.locationType, input.locationValue, input.now);
+  return row;
 }
 
 export async function deleteEventType(

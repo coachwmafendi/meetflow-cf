@@ -104,6 +104,37 @@ describe("event types", () => {
     expect(error).toContain("location_value");
   });
 
+  it("remembers meeting links for reuse, deduplicated per platform", async () => {
+    const host = await createHost("wan");
+    const payload = (slug: string) => ({
+      name: "C",
+      slug,
+      duration_minutes: 30,
+      location_type: "google_meet",
+      location_value: "https://meet.google.com/room-a",
+    });
+    await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify(payload("a")),
+    });
+    await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify(payload("b")),
+    });
+
+    const res = await api("/api/event-types/locations?type=google_meet", {
+      cookie: host.cookie,
+    });
+    expect(res.status).toBe(200);
+    const { locations } = await res.json<{ locations: string[] }>();
+    expect(locations).toEqual(["https://meet.google.com/room-a"]);
+
+    const other = await api("/api/event-types/locations?type=zoom", { cookie: host.cookie });
+    expect((await other.json<{ locations: string[] }>()).locations).toEqual([]);
+  });
+
   it("does not leak another host's event type", async () => {
     const wan = await createHost("wan");
     const ali = await createHost("ali");

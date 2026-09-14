@@ -43,8 +43,24 @@ const EMBED_SCRIPT = `
           description: '',
           locationType: 'none',
           locationValue: '',
+          savedLink: '__new__',
+          savedLinks: [],
           error: '',
           submitting: false,
+
+          loadSaved() {
+            this.savedLinks = [];
+            this.savedLink = '__new__';
+            if (this.locationType !== 'google_meet' && this.locationType !== 'zoom') return;
+            var self = this;
+            fetch('/api/event-types/locations?type=' + this.locationType)
+              .then(function (res) { return res.ok ? res.json() : { locations: [] }; })
+              .then(function (body) {
+                self.savedLinks = body.locations || [];
+                if (self.savedLinks.length) self.savedLink = self.savedLinks[0];
+              })
+              .catch(function () {});
+          },
 
           locationLabel() {
             var labels = {
@@ -66,6 +82,13 @@ const EMBED_SCRIPT = `
             return placeholders[this.locationType] || '';
           },
 
+          locationValueToSend() {
+            if (this.locationType === 'google_meet' || this.locationType === 'zoom') {
+              return this.savedLink === '__new__' ? this.locationValue.trim() : this.savedLink;
+            }
+            return this.locationValue.trim();
+          },
+
           async submit() {
             this.submitting = true;
             this.error = '';
@@ -79,7 +102,7 @@ const EMBED_SCRIPT = `
                   duration_minutes: Number(this.duration),
                   description: this.description.trim() || null,
                   location_type: this.locationType,
-                  location_value: this.locationValue.trim() || null,
+                  location_value: this.locationValueToSend() || null,
                 }),
               });
               if (res.status === 201) {
@@ -421,7 +444,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
             </div>
             <div class="ui-fieldset">
               <label class="ui-label" for="et_location_type">Location</label>
-              <select class="ui-select" id="et_location_type" x-model="locationType">
+              <select class="ui-select" id="et_location_type" x-model="locationType" @change="loadSaved()">
                 <option value="none">No location</option>
                 <option value="google_meet">Google Meet</option>
                 <option value="zoom">Zoom</option>
@@ -430,9 +453,27 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
               </select>
             </div>
             <div class="ui-fieldset" x-show="locationType !== 'none'">
-              <label class="ui-label" for="et_location_value" x-text="locationLabel()"></label>
-              <input class="ui-input" id="et_location_value" x-model="locationValue"
-                     :placeholder="locationPlaceholder()" required>
+              <template x-if="locationType === 'google_meet' || locationType === 'zoom'">
+                <div>
+                  <label class="ui-label" for="et_location_value">Meeting link</label>
+                  <select class="ui-select" id="et_location_value" x-model="savedLink" required>
+                    <option value="__new__">Use a new link…</option>
+                    <template x-for="link in savedLinks" :key="link">
+                      <option :value="link" x-text="link"></option>
+                    </template>
+                  </select>
+                  <input class="ui-input mt-2" x-show="savedLink === '__new__'" x-model="locationValue"
+                         :required="savedLink === '__new__'"
+                         placeholder="https://meet.google.com/…" id="et_new_link">
+                </div>
+              </template>
+              <template x-if="locationType === 'in_person' || locationType === 'phone'">
+                <div>
+                  <label class="ui-label" for="et_location_value_alt" x-text="locationLabel()"></label>
+                  <input class="ui-input" id="et_location_value_alt" x-model="locationValue"
+                         :placeholder="locationPlaceholder()" required>
+                </div>
+              </template>
             </div>
             <div class="flex justify-end gap-2 pt-1">
               <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm" data-dialog-close>Cancel</button>
@@ -455,6 +496,7 @@ export function eventTypeEditPage(
   bookingCount: number,
   error?: string,
   toast = "",
+  savedLocations: string[] = [],
 ): string {
   const path = `/${user.slug}/${eventType.slug}`;
   const active = eventType.is_active === 1;
@@ -541,6 +583,31 @@ export function eventTypeEditPage(
                 .join("")}
             </select>`,
           })}
+          ${
+            eventType.location_type === "google_meet" || eventType.location_type === "zoom"
+              ? field({
+                  name: "saved_location_value",
+                  label: "Meeting link",
+                  required: false,
+                  controlHtml: `<select class="ui-select" id="saved_location_value" name="saved_location_value">
+                    <option value="__custom__">Use a new link…</option>
+                    ${savedLocations
+                      .map(
+                        (l) =>
+                          `<option value="${escapeHtml(l)}"${
+                            l === eventType.location_value ? " selected" : ""
+                          }>${escapeHtml(l)}</option>`,
+                      )
+                      .join("")}
+                    ${
+                      eventType.location_value && !savedLocations.includes(eventType.location_value)
+                        ? `<option value="${escapeHtml(eventType.location_value)}" selected>${escapeHtml(eventType.location_value)}</option>`
+                        : ""
+                    }
+                  </select>`,
+                })
+              : ""
+          }
           ${field({
             name: "location_value",
             label: "Location details",
