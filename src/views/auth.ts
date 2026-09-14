@@ -1,6 +1,26 @@
 import { escapeHtml, layout } from "./layout";
 import { TIMEZONE_SCRIPT, timezoneSelect } from "./timezoneSelect";
-import { alert, button, field } from "./ui";
+import { alert, button, field, icon } from "./ui";
+
+/** Password field with a show/hide eye toggle (Alpine, no extra JS). */
+function passwordField(options: { hint?: string; attrsHtml?: string } = {}): string {
+  return `<div class="ui-fieldset">
+      <label class="ui-label" for="password">Password</label>
+      <div class="relative" x-data="{ show: false }">
+        <input class="ui-input pr-10" id="password" name="password"
+               :type="show ? 'text' : 'password'" required ${options.attrsHtml ?? ""}
+               ${options.hint ? 'aria-describedby="password-hint"' : ""}>
+        <button type="button"
+                class="absolute inset-y-0 right-0 flex items-center px-3 text-muted transition-colors hover:text-ink"
+                :aria-label="show ? 'Hide password' : 'Show password'"
+                aria-controls="password" @click="show = !show">
+          <span x-show="!show">${icon("eye", "size-4")}</span>
+          <span x-show="show" x-cloak>${icon("eyeOff", "size-4")}</span>
+        </button>
+      </div>
+      ${options.hint ? `<p class="ui-hint" id="password-hint">${escapeHtml(options.hint)}</p>` : ""}
+    </div>`;
+}
 
 function authShell(options: {
   title: string;
@@ -56,7 +76,7 @@ export function loginPage(error?: string): string {
     formHtml: `
       <form class="space-y-4" method="post" action="/login">
         ${field({ name: "email", label: "Email", type: "email", placeholder: "you@example.com" })}
-        ${field({ name: "password", label: "Password", type: "password" })}
+        ${passwordField()}
         <div class="pt-1">${button({
           label: "Sign in",
           variant: "primary",
@@ -85,10 +105,7 @@ export function registerPage(error?: string): string {
       <form class="space-y-4" method="post" action="/register">
         ${field({ name: "name", label: "Name", placeholder: "Wan Mafendi" })}
         ${field({ name: "email", label: "Email", type: "email", placeholder: "you@example.com" })}
-        ${field({
-          name: "password",
-          label: "Password",
-          type: "password",
+        ${passwordField({
           hint: "At least 8 characters.",
           attrsHtml: 'minlength="8"',
         })}

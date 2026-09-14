@@ -9,7 +9,9 @@ describe("pages", () => {
     const res = await SELF.fetch("https://example.com/login");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
-    expect(await res.text()).toContain("Sign in");
+    const html = await res.text();
+    expect(html).toContain("Sign in");
+    expect(html).toContain("Show password");
   });
 
   it("redirects an anonymous visitor away from the dashboard", async () => {
