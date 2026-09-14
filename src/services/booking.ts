@@ -111,6 +111,7 @@ export async function createBooking(
     endAt: endIso,
     timezone: input.guestTimezone,
     notes: input.notes,
+    bufferMinutes: eventType.buffer_minutes,
     now: nowIso(),
   });
   if (!booking) throw new BookingError("This time slot is no longer available.", 409);

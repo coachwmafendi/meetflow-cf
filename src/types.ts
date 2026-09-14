@@ -27,6 +27,8 @@ export interface EventTypeRow {
   slug: string;
   description: string | null;
   duration_minutes: number;
+  /** Minutes of gap left after each booking of this type (0 = none). */
+  buffer_minutes: number;
   is_active: number;
   /** "none" | "google_meet" | "zoom" | "in_person" | "phone" */
   location_type: string;

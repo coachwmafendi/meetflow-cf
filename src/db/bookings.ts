@@ -1,8 +1,10 @@
+import { addMinutes, isoUtc } from "../lib/time";
 import type { BookingRow } from "../types";
 
 export interface BusyInterval {
   start_at: string;
   end_at: string;
+  event_type_id: number;
 }
 
 export async function listConfirmedBetween(
@@ -13,7 +15,7 @@ export async function listConfirmedBetween(
 ): Promise<BusyInterval[]> {
   const { results } = await db
     .prepare(
-      `SELECT start_at, end_at FROM bookings
+      `SELECT start_at, end_at, event_type_id FROM bookings
        WHERE user_id = ?
          AND status = 'confirmed'
          AND start_at < ?
@@ -33,17 +35,23 @@ export interface InsertBookingInput {
   endAt: string;
   timezone: string;
   notes: string | null;
+  bufferMinutes: number;
   now: string;
 }
 
 /**
  * Atomic conditional insert (ERD.md §9). Returns null when an overlapping
  * confirmed booking already exists — no interactive transaction required.
+ * A second guard rejects starts that land inside another confirmed booking's
+ * buffer window for the same event type.
  */
 export async function insertBookingIfFree(
   db: D1Database,
   input: InsertBookingInput,
 ): Promise<BookingRow | null> {
+  const bufferedEnd = isoUtc(addMinutes(new Date(input.endAt), input.bufferMinutes));
+  const bufferedStart = isoUtc(addMinutes(new Date(input.startAt), -input.bufferMinutes));
+
   try {
     return await db
       .prepare(
@@ -56,6 +64,14 @@ export async function insertBookingIfFree(
            SELECT 1 FROM bookings
            WHERE user_id = ?
              AND status = 'confirmed'
+             AND start_at < ?
+             AND end_at > ?
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM bookings
+           WHERE user_id = ?
+             AND status = 'confirmed'
+             AND event_type_id = ?
              AND start_at < ?
              AND end_at > ?
          )
@@ -75,6 +91,10 @@ export async function insertBookingIfFree(
         input.userId,
         input.endAt,
         input.startAt,
+        input.userId,
+        input.eventTypeId,
+        bufferedEnd,
+        bufferedStart,
       )
       .first<BookingRow>();
   } catch (err) {

@@ -68,6 +68,7 @@ eventTypeRoutes.post("/", async (c) => {
       slug,
       description,
       durationMinutes,
+      bufferMinutes: body.buffer_minutes === undefined ? 0 : Number(body.buffer_minutes) || 0,
       locationType,
       locationValue,
       now: nowIso(),
@@ -142,6 +143,7 @@ eventTypeRoutes.patch("/:id", async (c) => {
         body.duration_minutes === undefined
           ? current.duration_minutes
           : requireInt(body, "duration_minutes", { min: 5, max: 480 }),
+      bufferMinutes: body.buffer_minutes === undefined ? 0 : Number(body.buffer_minutes) || 0,
       locationType,
       locationValue,
       isActive:
@@ -178,6 +180,7 @@ eventTypeRoutes.delete("/:id", async (c) => {
       slug: current.slug,
       description: current.description,
       durationMinutes: current.duration_minutes,
+      bufferMinutes: current.buffer_minutes,
       locationType: current.location_type,
       locationValue: current.location_value,
       isActive: 0,
