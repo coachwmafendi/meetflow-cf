@@ -28,9 +28,10 @@ import {
   BookingError,
   cancelBookingByToken,
   cancelOwnedBooking,
+  rescheduleBooking,
   resolveCancelToken,
 } from "../services/booking";
-import { queueBookingCancelled } from "../services/email";
+import { queueBookingCancelled, queueBookingCreated } from "../services/email";
 import { loginPage, registerPage } from "../views/auth";
 import {
   availabilityPage,
@@ -528,6 +529,54 @@ pageRoutes.post("/booking/:id/cancel", rateLimit(LIMITS.guestCancel), async (c) 
     return html(cancelledPage(host, eventType));
   } catch (err) {
     if (err instanceof BookingError) return html(cancelUnavailablePage(err.message), err.status);
+    throw err;
+  }
+});
+
+pageRoutes.get("/booking/:id/reschedule", rateLimit(LIMITS.guestCancel), async (c) => {
+  const token = c.req.query("token") ?? "";
+  try {
+    const { booking, host, eventType } = await resolveCancelToken(
+      c.env.DB,
+      Number(c.req.param("id")),
+      token,
+      c.env.SESSION_SECRET,
+    );
+    if (booking.status !== "confirmed") {
+      return html(cancelUnavailablePage("This booking can no longer be rescheduled."), 409);
+    }
+    if (Date.parse(booking.end_at) <= Date.now()) {
+      return html(cancelUnavailablePage("This meeting has already taken place."), 409);
+    }
+    return html(
+      bookingPage(host, eventType, {
+        bookingId: booking.id,
+        token,
+        oldStartAt: booking.start_at,
+      }),
+    );
+  } catch (err) {
+    if (err instanceof BookingError) return html(cancelUnavailablePage(err.message), err.status);
+    throw err;
+  }
+});
+
+pageRoutes.post("/booking/:id/reschedule", rateLimit(LIMITS.guestCancel), async (c) => {
+  const body = await c.req
+    .json<Record<string, unknown>>()
+    .catch(() => ({}) as Record<string, unknown>);
+  try {
+    const result = await rescheduleBooking(c.env.DB, {
+      bookingId: Number(c.req.param("id")),
+      token: String(body.token ?? ""),
+      secret: c.env.SESSION_SECRET,
+      newStartAt: String(body.start_at ?? ""),
+      guestTimezone: String(body.timezone ?? "UTC"),
+    });
+    c.executionCtx.waitUntil(queueBookingCreated(c.env, result.booking.id));
+    return c.json({ booking: result.booking }, 201);
+  } catch (err) {
+    if (err instanceof BookingError) return c.json({ error: err.message }, err.status);
     throw err;
   }
 });

@@ -115,7 +115,11 @@ export function profilePage(host: PublicUser, eventTypes: EventTypeRow[]): strin
   });
 }
 
-export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
+export function bookingPage(
+  host: PublicUser,
+  eventType: EventTypeRow,
+  reschedule?: { bookingId: number; token: string; oldStartAt: string },
+): string {
   const data = {
     hostSlug: host.slug,
     hostName: host.name,
@@ -123,6 +127,7 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
     eventSlug: eventType.slug,
     eventName: eventType.name,
     durationMinutes: eventType.duration_minutes,
+    reschedule: reschedule ?? null,
   };
 
   const WEEKDAY_HEAD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -175,6 +180,16 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
                     ${icon("calendar", "size-4 shrink-0")}
                     <span class="ui-time font-medium" x-text="summary()"></span>
                   </p>
+                </div>
+              </template>
+
+              <template x-if="reschedule">
+                <div class="mt-4 border-t border-line pt-4">
+                  <p class="flex items-center gap-2 text-[0.8125rem] text-muted">
+                    ${icon("calendar", "size-4 shrink-0")}
+                    <span>Currently booked</span>
+                  </p>
+                  <p class="ui-time mt-1 text-sm font-medium text-ink" x-text="oldLabel()"></p>
                 </div>
               </template>
 
@@ -256,7 +271,7 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
                             placeholder="Anything useful to know beforehand?"></textarea>
                 </div>
                 <button class="ui-btn ui-btn-primary ui-btn-lg" type="submit" :disabled="submitting">
-                  <span x-text="submitting ? 'Booking…' : 'Confirm booking'"></span>
+                  <span x-text="submitting ? 'Booking…' : (reschedule ? 'Confirm new time' : 'Confirm booking')"></span>
                 </button>
               </form>
             </section>
@@ -309,7 +324,7 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
             <section class="p-5 sm:p-6" x-show="step === 'form'" x-cloak>
               <template x-if="selected">
                 <div>
-                  <p class="ui-eyebrow">Your booking</p>
+                  <p class="ui-eyebrow" x-text="reschedule ? 'New time' : 'Your booking'"></p>
                   <p class="ui-time mt-2 text-base font-semibold text-ink" x-text="summary()"></p>
                   <p class="mt-1 text-[0.8125rem] text-muted" x-text="timezoneLabel"></p>
                 </div>
@@ -505,6 +520,19 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
               });
             },
 
+            oldLabel() {
+              if (!this.reschedule) return '';
+              return new Date(this.reschedule.oldStartAt).toLocaleString('en-US', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: this.hour12,
+                timeZone: this.guestTimezone,
+              });
+            },
+
             choose(slot) {
               this.selected = slot;
               this.error = '';
@@ -514,16 +542,23 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
             async submit() {
               this.submitting = true;
               this.error = '';
-              var res = await fetch('/api/public/' + this.hostSlug + '/' + this.eventSlug + '/book', {
+              var isReschedule = !!this.reschedule;
+              var url = isReschedule
+                ? '/booking/' + this.reschedule.bookingId + '/reschedule'
+                : '/api/public/' + this.hostSlug + '/' + this.eventSlug + '/book';
+              var payload = isReschedule
+                ? { token: this.reschedule.token, start_at: this.selected.startAt, timezone: this.guestTimezone }
+                : {
+                    start_at: this.selected.startAt,
+                    guest_name: this.guestName,
+                    guest_email: this.guestEmail,
+                    notes: this.notes,
+                    timezone: this.guestTimezone,
+                  };
+              var res = await fetch(url, {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({
-                  start_at: this.selected.startAt,
-                  guest_name: this.guestName,
-                  guest_email: this.guestEmail,
-                  notes: this.notes,
-                  timezone: this.guestTimezone,
-                }),
+                body: JSON.stringify(payload),
               });
               this.submitting = false;
               if (res.status === 201) {

@@ -1,4 +1,4 @@
-import { env } from "cloudflare:test";
+import { SELF, env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { insertBookingIfFree, rescheduleBookingIfFree } from "../../src/db/bookings";
 import { rescheduleBooking } from "../../src/services/booking";
@@ -237,5 +237,47 @@ describe("rescheduleBooking", () => {
         nowMs: Date.parse("2026-10-30T00:00:00Z"),
       }),
     ).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+describe("reschedule pages and API", () => {
+  beforeEach(resetDb);
+
+  it("renders the reschedule page for a valid link", async () => {
+    const { booking } = await seedBookable();
+    const token = await signCancelToken(booking.id, SECRET);
+    const res = await SELF.fetch(
+      `https://example.com/booking/${booking.id}/reschedule?token=${encodeURIComponent(token)}`,
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Currently booked");
+    expect(html).toContain("Confirm new time");
+  });
+
+  it("rejects an invalid token with a friendly page", async () => {
+    const { booking } = await seedBookable();
+    const res = await SELF.fetch(
+      `https://example.com/booking/${booking.id}/reschedule?token=garbage`,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("reschedules via POST and returns the new booking", async () => {
+    const { booking } = await seedBookable();
+    const token = await signCancelToken(booking.id, SECRET);
+    const res = await SELF.fetch(`https://example.com/booking/${booking.id}/reschedule`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        token,
+        start_at: "2026-10-05T02:00:00Z",
+        timezone: "Asia/Kuala_Lumpur",
+      }),
+    });
+    expect(res.status).toBe(201);
+    const { booking: newBooking } = await res.json<{ booking: { id: number; start_at: string } }>();
+    expect(newBooking.start_at).toBe("2026-10-05T02:00:00Z");
+    expect(newBooking.id).not.toBe(booking.id);
   });
 });
