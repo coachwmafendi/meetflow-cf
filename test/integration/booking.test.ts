@@ -232,7 +232,7 @@ describe("insertBookingIfFree buffer guard", () => {
       eventTypeId: otherTypeId,
       startAt: "2026-09-21T01:30:00Z",
       endAt: "2026-09-21T02:00:00Z",
-      bufferMinutes: 0,
+      bufferMinutes: 15,
     });
     expect(otherType).not.toBeNull();
   });
