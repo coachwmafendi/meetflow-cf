@@ -4,13 +4,14 @@
 
 MeetFlow uses Cloudflare D1 as the primary relational database.
 
-The MVP contains four core tables:
+The MVP contains five tables:
 
 ```text
 users
 event_types
 availability_rules
 bookings
+saved_locations
 ```
 
 Relationship:
@@ -23,8 +24,10 @@ users
   +----< availability_rules
   |
   +----< bookings
-             |
-             +---- event_types
+  |          |
+  |          +---- event_types
+  |
+  +----< saved_locations
 ```
 
 Rendered diagram: [erd.png](erd.png)
@@ -39,6 +42,7 @@ erDiagram
     USERS ||--o{ EVENT_TYPES : creates
     USERS ||--o{ AVAILABILITY_RULES : defines
     USERS ||--o{ BOOKINGS : hosts
+    USERS ||--o{ SAVED_LOCATIONS : remembers
     EVENT_TYPES ||--o{ BOOKINGS : receives
 
     USERS {
@@ -48,6 +52,7 @@ erDiagram
         TEXT password_hash
         TEXT slug UK
         TEXT timezone
+        TEXT avatar_key
         TEXT created_at
         TEXT updated_at
     }
@@ -59,6 +64,9 @@ erDiagram
         TEXT slug
         TEXT description
         INTEGER duration_minutes
+        INTEGER buffer_minutes
+        TEXT location_type
+        TEXT location_value
         INTEGER is_active
         TEXT created_at
         TEXT updated_at
@@ -86,8 +94,17 @@ erDiagram
         TEXT timezone
         TEXT status
         TEXT notes
+        TEXT reminder_sent_at
         TEXT created_at
         TEXT updated_at
+    }
+
+    SAVED_LOCATIONS {
+        INTEGER id PK
+        INTEGER user_id FK
+        TEXT location_type
+        TEXT location_value
+        TEXT created_at
     }
 ```
 
@@ -105,6 +122,7 @@ Stores host accounts.
 | password_hash | TEXT    | Yes      | Secure password hash            |
 | slug          | TEXT    | Yes      | Public username                 |
 | timezone      | TEXT    | Yes      | IANA timezone                   |
+| avatar_key    | TEXT    | No       | R2 object key (null = monogram) |
 | created_at    | TEXT    | Yes      | Creation timestamp              |
 | updated_at    | TEXT    | Yes      | Last update timestamp           |
 
@@ -144,17 +162,20 @@ Public profile:
 
 Defines meetings that the host offers.
 
-| Column           | Type    | Required | Description              |
-| ---------------- | ------- | -------- | ------------------------ |
-| id               | INTEGER | Yes      | Primary key              |
-| user_id          | INTEGER | Yes      | Host                     |
-| name             | TEXT    | Yes      | Event name               |
-| slug             | TEXT    | Yes      | Public URL slug          |
-| description      | TEXT    | No       | Event description        |
-| duration_minutes | INTEGER | Yes      | Meeting duration         |
-| is_active        | INTEGER | Yes      | 1 = active, 0 = inactive |
-| created_at       | TEXT    | Yes      | Creation timestamp       |
-| updated_at       | TEXT    | Yes      | Last update timestamp    |
+| Column           | Type    | Required | Description                                         |
+| ---------------- | ------- | -------- | --------------------------------------------------- |
+| id               | INTEGER | Yes      | Primary key                                         |
+| user_id          | INTEGER | Yes      | Host                                                |
+| name             | TEXT    | Yes      | Event name                                          |
+| slug             | TEXT    | Yes      | Public URL slug                                     |
+| description      | TEXT    | No       | Event description                                   |
+| duration_minutes | INTEGER | Yes      | Meeting duration                                    |
+| buffer_minutes   | INTEGER | Yes      | Gap after each booking (0–120, default 0)           |
+| location_type    | TEXT    | Yes      | `none`, `google_meet`, `zoom`, `in_person`, `phone` |
+| location_value   | TEXT    | No       | Meet/Zoom URL, address, or phone                    |
+| is_active        | INTEGER | Yes      | 1 = active, 0 = inactive                            |
+| created_at       | TEXT    | Yes      | Creation timestamp                                  |
+| updated_at       | TEXT    | Yes      | Last update timestamp                               |
 
 Foreign key:
 
@@ -183,6 +204,14 @@ Public URL:
 ```text
 /wan/consultation
 ```
+
+`buffer_minutes` is a gap added **after** each meeting of this type. It affects only bookings of
+the same event type: those busy intervals are expanded by the buffer when generating slots and
+when guarding inserts. Bookings of other event types block by their raw duration. See §9.
+
+`location_type` / `location_value` describe where the meeting happens. `none` means unset.
+For `google_meet` and `zoom`, a bare domain is normalised to `https://…` and the value is
+remembered in `saved_locations` so later forms can offer it as a choice.
 
 ---
 
@@ -234,20 +263,21 @@ and `day_of_week BETWEEN 0 AND 6`.
 
 Stores appointments.
 
-| Column        | Type    | Required | Description            |
-| ------------- | ------- | -------- | ---------------------- |
-| id            | INTEGER | Yes      | Primary key            |
-| user_id       | INTEGER | Yes      | Host                   |
-| event_type_id | INTEGER | Yes      | Event type             |
-| guest_name    | TEXT    | Yes      | Guest name             |
-| guest_email   | TEXT    | Yes      | Guest email            |
-| start_at      | TEXT    | Yes      | UTC start              |
-| end_at        | TEXT    | Yes      | UTC end                |
-| timezone      | TEXT    | Yes      | Guest/booking timezone |
-| status        | TEXT    | Yes      | Booking status         |
-| notes         | TEXT    | No       | Guest notes            |
-| created_at    | TEXT    | Yes      | Creation timestamp     |
-| updated_at    | TEXT    | Yes      | Last update timestamp  |
+| Column           | Type    | Required | Description                                        |
+| ---------------- | ------- | -------- | -------------------------------------------------- |
+| id               | INTEGER | Yes      | Primary key                                        |
+| user_id          | INTEGER | Yes      | Host                                               |
+| event_type_id    | INTEGER | Yes      | Event type                                         |
+| guest_name       | TEXT    | Yes      | Guest name                                         |
+| guest_email      | TEXT    | Yes      | Guest email                                        |
+| start_at         | TEXT    | Yes      | UTC start                                          |
+| end_at           | TEXT    | Yes      | UTC end                                            |
+| timezone         | TEXT    | Yes      | Guest/booking timezone                             |
+| status           | TEXT    | Yes      | Booking status                                     |
+| notes            | TEXT    | No       | Guest notes                                        |
+| reminder_sent_at | TEXT    | No       | When the 24h reminder was queued (null = not sent) |
+| created_at       | TEXT    | Yes      | Creation timestamp                                 |
+| updated_at       | TEXT    | Yes      | Last update timestamp                              |
 
 Foreign keys:
 
@@ -278,11 +308,46 @@ YYYY-MM-DDTHH:MM:SSZ
 Fixed width matters: SQLite compares TEXT lexicographically, and this format makes lexicographic
 order equal chronological order. Never store a variant with milliseconds or an offset suffix.
 
+`reminder_sent_at` is stamped in the same statement that selects due rows, so overlapping cron
+runs cannot send the same guest two reminders.
+
 ---
 
-## 7. SQL Schema
+## 7. `saved_locations`
 
-Initial D1 schema (`migrations/0001_initial.sql`):
+Remembers meeting links a host has used (a Google Meet room, a Zoom URL) so the event-type form
+can offer them as a dropdown instead of forcing the host to retype the same URL. Reusing a link
+bumps its `created_at` rather than inserting a duplicate.
+
+| Column         | Type    | Required | Description                        |
+| -------------- | ------- | -------- | ---------------------------------- |
+| id             | INTEGER | Yes      | Primary key                        |
+| user_id        | INTEGER | Yes      | Host                               |
+| location_type  | TEXT    | Yes      | `google_meet` or `zoom`            |
+| location_value | TEXT    | Yes      | The URL                            |
+| created_at     | TEXT    | Yes      | Last-used timestamp (newest first) |
+
+Foreign key:
+
+```text
+saved_locations.user_id
+    ->
+users.id
+```
+
+Constraint:
+
+```sql
+UNIQUE(user_id, location_type, location_value)
+```
+
+Only link types are stored here; `in_person` and `phone` values are not remembered.
+
+---
+
+## 8. SQL Schema
+
+Initial D1 schema and subsequent migrations (`migrations/0001_initial.sql` … `0006_buffer_minutes.sql`):
 
 ```sql
 PRAGMA foreign_keys = ON;
@@ -297,6 +362,9 @@ CREATE TABLE users (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+-- 0002_avatars.sql
+ALTER TABLE users ADD COLUMN avatar_key TEXT;
 
 CREATE TABLE event_types (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -315,6 +383,13 @@ CREATE TABLE event_types (
 
     UNIQUE(user_id, slug)
 );
+
+-- 0004_event_type_location.sql
+ALTER TABLE event_types ADD COLUMN location_type TEXT NOT NULL DEFAULT 'none';
+ALTER TABLE event_types ADD COLUMN location_value TEXT;
+
+-- 0006_buffer_minutes.sql
+ALTER TABLE event_types ADD COLUMN buffer_minutes INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE availability_rules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -351,11 +426,29 @@ CREATE TABLE bookings (
     FOREIGN KEY (event_type_id)
         REFERENCES event_types(id)
 );
+
+-- 0003_reminders.sql
+ALTER TABLE bookings ADD COLUMN reminder_sent_at TEXT;
+
+-- 0005_saved_locations.sql
+CREATE TABLE saved_locations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    location_type TEXT NOT NULL,
+    location_value TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE,
+
+    UNIQUE(user_id, location_type, location_value)
+);
 ```
 
 ---
 
-## 8. Indexes
+## 9. Indexes
 
 ```sql
 CREATE INDEX idx_event_types_user_id
@@ -383,11 +476,19 @@ ON bookings(user_id, start_at);
 CREATE UNIQUE INDEX idx_bookings_unique_confirmed_start
 ON bookings(user_id, start_at)
 WHERE status = 'confirmed';
+
+-- Reminder sweep: confirmed bookings still needing a reminder, by start time.
+CREATE INDEX idx_bookings_reminder_due
+ON bookings(start_at)
+WHERE status = 'confirmed' AND reminder_sent_at IS NULL;
+
+CREATE INDEX idx_saved_locations_user
+ON saved_locations(user_id, location_type);
 ```
 
 ---
 
-## 9. Booking Overlap
+## 10. Booking Overlap
 
 A booking overlaps another booking when:
 
@@ -417,7 +518,11 @@ The requested slot is unavailable.
 
 ### Atomic conditional insert
 
-D1 has no interactive transactions, so the check and the insert must be one statement:
+D1 has no interactive transactions, so the check and the insert must be one statement.
+
+The first `NOT EXISTS` is the plain overlap guard. The second is the **buffer guard**: it rejects a
+new booking whose window lands inside an existing booking's buffer, but only for bookings of the
+same event type (the buffer is a pacing preference, not real busyness).
 
 ```sql
 INSERT INTO bookings (
@@ -429,17 +534,25 @@ WHERE NOT EXISTS (
     SELECT 1 FROM bookings
     WHERE user_id = ?
       AND status = 'confirmed'
-      AND start_at < ?
-      AND end_at > ?
+      AND start_at < ?   -- requested end_at
+      AND end_at > ?     -- requested start_at
+)
+AND NOT EXISTS (
+    SELECT 1 FROM bookings
+    WHERE user_id = ?
+      AND event_type_id = ?   -- same type as the new booking
+      AND status = 'confirmed'
+      AND start_at < ?        -- requested end_at + buffer
+      AND end_at > ?          -- requested start_at − buffer
 );
 ```
 
 `meta.changes === 0` means the slot was taken between slot listing and submission — return
-`409 Conflict`. The partial unique index in section 8 is the second line of defence.
+`409 Conflict`. The partial unique index in section 9 is the second line of defence.
 
 ---
 
-## 10. Booking Creation Logic
+## 11. Booking Creation Logic
 
 The application must NOT trust the availability returned to the browser.
 
@@ -463,7 +576,7 @@ The availability and overlap checks must happen on the server.
 
 ---
 
-## 11. Data Ownership
+## 12. Data Ownership
 
 A host owns:
 
@@ -475,6 +588,8 @@ users
   +-- availability_rules
   |
   +-- bookings
+  |
+  +-- saved_locations
 ```
 
 Every authenticated request must verify ownership.
@@ -492,7 +607,7 @@ Never load an event type only by ID for an authenticated operation.
 
 ---
 
-## 12. Deletion Rules
+## 13. Deletion Rules
 
 ### User
 
@@ -525,7 +640,7 @@ status = 'cancelled'
 
 ---
 
-## 13. Timezone Strategy
+## 14. Timezone Strategy
 
 Store booking timestamps in UTC.
 
@@ -564,7 +679,7 @@ Conversion is done with `Intl.DateTimeFormat` + `formatToParts` (full ICU is ava
 
 ---
 
-## 14. Future Tables
+## 15. Future Tables
 
 Do NOT create these tables in the initial MVP unless the feature is actually being implemented:
 
@@ -580,7 +695,6 @@ webhook_events
 email_jobs
 teams
 team_members
-locations
 ```
 
 Possible future structure:
@@ -605,7 +719,7 @@ users
 
 ---
 
-## 15. Cloudflare Service Mapping
+## 16. Cloudflare Service Mapping
 
 ### D1
 
@@ -617,6 +731,7 @@ Store:
 - Event types
 - Availability
 - Bookings
+- Saved locations
 
 ### KV
 
@@ -633,46 +748,21 @@ Short-lived sessions
 
 ### R2
 
-Optional file storage.
-
-Potential use:
-
-```text
-Avatar
-Logo
-Uploaded images
-Attachments
-```
+**In use** — host avatars. The `users.avatar_key` column stores the object key; the row remains
+null while the host uses their monogram.
 
 ### Queues
 
-Background jobs.
-
-Potential use:
-
-```text
-Booking confirmation email
-Reminder email
-Calendar synchronization
-Webhook processing
-```
+**In use** — transactional email (booking confirmation, cancellation, reminder). Messages carry a
+booking id only; the consumer re-reads D1 at send time.
 
 ### Cron
 
-Scheduled operations.
-
-Potential use:
-
-```text
-Reminder processing
-Cleanup
-Calendar sync
-Maintenance
-```
+**In use** — hourly reminder sweep, de-duplicated with `bookings.reminder_sent_at`.
 
 ---
 
-## 16. Database Principle
+## 17. Database Principle
 
 D1 is the source of truth.
 
@@ -689,19 +779,20 @@ in KV or R2.
 
 ---
 
-## 17. MVP Database Philosophy
+## 18. MVP Database Philosophy
 
 Keep the schema small.
 
 Do not create tables for future features before they are required.
 
-The initial database should remain:
+The database should remain:
 
 ```text
 users
 event_types
 availability_rules
 bookings
+saved_locations
 ```
 
 This keeps the project easy to understand, test and modify with AI coding agents.

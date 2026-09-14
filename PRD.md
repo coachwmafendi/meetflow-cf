@@ -7,7 +7,7 @@ MeetFlow is a lightweight scheduling and booking SaaS inspired by Cal.com.
 The MVP allows a host to:
 
 - Create an account
-- Create public event types
+- Create public event types (with duration, a buffer after each meeting, and a meeting location)
 - Define weekly availability
 - Publish a public booking page
 - Let guests select available time slots
@@ -217,6 +217,8 @@ Each event type contains:
 - Slug
 - Description
 - Duration
+- Buffer after meeting
+- Location
 - Active/inactive status
 
 Example:
@@ -225,6 +227,8 @@ Example:
 Name: Consultation
 Slug: consultation
 Duration: 30
+Buffer: 10
+Location: Google Meet — https://meet.google.com/abc-defg-hij
 Description: A 30-minute consultation
 ```
 
@@ -233,6 +237,34 @@ Public URL:
 ```text
 /wan/consultation
 ```
+
+### Buffer time
+
+An event type may define a `buffer_minutes` gap (0–120, default 0) added **after** each meeting so
+the host is never back-to-back.
+
+- The buffer applies only to bookings **of the same event type**. Bookings of other types still
+  block by their raw duration — the host is literally busy; the buffer is only a pacing preference.
+- The slot grid itself stays dense (duration step); slots disappear only around actual bookings.
+- The buffer is enforced twice: when generating availability, and again in the booking insert guard,
+  so two concurrent guests can never create meetings closer than the buffer.
+- Buffer **before** meetings and per-weekday buffers are out of scope.
+
+### Meeting location
+
+An event type may declare where the meeting happens:
+
+| `location_type` | `location_value` holds |
+| --------------- | ---------------------- |
+| `none`          | nothing (unset)        |
+| `google_meet`   | a Meet URL             |
+| `zoom`          | a Zoom URL             |
+| `in_person`     | a street address       |
+| `phone`         | a phone number         |
+
+For link types a bare domain is normalised to `https://…`. When a link is saved it is remembered
+in `saved_locations`, so later forms offer previously used links as a dropdown instead of making
+the host retype them. The location is shown on the public booking page and the confirmation page.
 
 ---
 
@@ -324,6 +356,7 @@ The system MUST:
 - Only show slots inside availability
 - Never show slots in the past
 - Respect event duration
+- Respect event buffer (same-type bookings keep their gap; see §7)
 - Respect host timezone
 - Prevent overlapping bookings
 - Re-check availability when booking is submitted
@@ -409,7 +442,8 @@ both pass the check. The MVP closes the race with two mechanisms:
 
 1. **Conditional insert** — one atomic statement:
    `INSERT INTO bookings (...) SELECT ?,?,... WHERE NOT EXISTS (<overlap query>)`.
-   `meta.changes === 0` means the slot was taken.
+   A second `NOT EXISTS` guard rejects same-type bookings that would land inside an existing
+   booking's buffer (see ERD §10). `meta.changes === 0` means the slot was taken.
 2. **Partial unique index** — `UNIQUE(user_id, start_at) WHERE status = 'confirmed'`, which makes an
    exact-start duplicate impossible even if the conditional insert is ever bypassed.
 
@@ -454,6 +488,9 @@ milliseconds) so that SQLite lexicographic string comparison equals chronologica
 
 ## 14. Dashboard
 
+The host area is a left-sidebar shell (with a mobile drawer) and a header that carries the
+light/dark/OS theme toggle.
+
 Host dashboard navigation:
 
 ```text
@@ -463,6 +500,8 @@ Availability
 Bookings
 Settings
 ```
+
+The sidebar footer also offers "view public page", "copy public page link" and "settings".
 
 Dashboard should show:
 
@@ -498,12 +537,14 @@ Sarah     Demo            16:00
 
 Host can:
 
-- Create event type
+- Create event type (modal on the Event Types page)
 - Edit event type (`/dashboard/event-types/:id`)
 - Activate event type
 - Deactivate event type
+- Clone event type
 - Delete event type
-- Copy public URL
+- Copy public URL, open the public page, or copy an embed snippet
+- Set duration, buffer after meeting, and meeting location (including saved-link dropdown)
 
 Delete is safe by construction: an event type with bookings is deactivated instead of removed,
 so historical bookings keep their event name. The button text says which will happen.
@@ -512,11 +553,11 @@ Event type card:
 
 ```text
 Consultation
-30 min
+30 min · 10 min buffer
 
 /wan/consultation
 
-[Copy Link] [Edit]
+[Copy Link] [Edit] [⋯]
 ```
 
 ---
@@ -605,6 +646,14 @@ The page should be:
 - Accessible
 - Mobile friendly
 
+### Layout
+
+The booking page is a Cal.com-style three-panel view: event details and host on the left, a month
+calendar in the middle, and the time-slot list on the right. Free/busy for the visible month comes
+from the month endpoint, so the calendar greys out days with no slots without loading each day.
+The chosen location (Meet/Zoom link, address, phone) is shown with the event details, and the
+confirmation page repeats it.
+
 ### Theming
 
 Light and dark are both supported and follow the visitor's OS preference. Hosts additionally
@@ -630,10 +679,14 @@ POST /api/auth/logout
 ```http
 GET    /api/event-types
 POST   /api/event-types
+GET    /api/event-types/locations?type=<location_type>
 GET    /api/event-types/:id
 PATCH  /api/event-types/:id
 DELETE /api/event-types/:id
 ```
+
+`GET /api/event-types/locations` returns the host's previously used Meet/Zoom links for a link
+type (`type=google_meet` or `type=zoom`); it returns an empty list for other types.
 
 ### Availability
 
@@ -647,13 +700,15 @@ PUT /api/availability
 ```http
 GET  /api/public/:username/:eventSlug
 GET  /api/public/:username/:eventSlug/slots?date=YYYY-MM-DD&tz=<IANA>
+GET  /api/public/:username/:eventSlug/month?year=YYYY&month=M
 POST /api/public/:username/:eventSlug/book
 ```
 
 ### Bookings
 
 ```http
-GET  /api/bookings
+GET  /api/bookings?scope=upcoming|past|cancelled
+GET  /api/bookings/stats
 GET  /api/bookings/:id
 POST /api/bookings/:id/cancel
 ```
@@ -661,17 +716,28 @@ POST /api/bookings/:id/cancel
 ### HTML pages
 
 ```text
-GET /                       marketing / redirect to dashboard
-GET /register
-GET /login
-GET /dashboard
-GET /dashboard/event-types
-GET /dashboard/availability
-GET /dashboard/bookings
-GET /dashboard/settings
-GET /:username
-GET /:username/:eventSlug
-GET /booking/:id/confirmed
+GET  /                       marketing / redirect to dashboard
+GET  /register               POST /register
+GET  /login                  POST /login
+POST /logout
+GET  /dashboard
+GET  /dashboard/event-types  POST /dashboard/event-types
+GET  /dashboard/event-types/:id
+POST /dashboard/event-types/:id
+POST /dashboard/event-types/:id/toggle
+POST /dashboard/event-types/:id/delete
+POST /dashboard/event-types/:id/clone
+GET  /dashboard/availability POST /dashboard/availability
+GET  /dashboard/bookings     POST /dashboard/bookings/:id/cancel
+GET  /dashboard/settings     POST /dashboard/settings
+POST /dashboard/settings/avatar
+POST /dashboard/settings/avatar/remove
+GET  /avatars/:userId/:file
+GET  /:username
+GET  /:username/:eventSlug
+GET  /booking/:id/cancel
+POST /booking/:id/cancel
+GET  /booking/:id/confirmed
 ```
 
 ---
@@ -694,11 +760,13 @@ The application must:
 Unauthenticated endpoints are rate limited per client IP, keyed on `CF-Connecting-IP`
 (edge-set, so a client cannot spoof it). Over the limit returns `429` with `Retry-After`.
 
-| Action   | Limit       | Endpoints sharing the counter                |
-| -------- | ----------- | -------------------------------------------- |
-| Book     | 10 / minute | `POST /api/public/:username/:eventSlug/book` |
-| Log in   | 10 / minute | `POST /api/auth/login`, `POST /login`        |
-| Register | 5 / hour    | `POST /api/auth/register`, `POST /register`  |
+| Action        | Limit       | Endpoints sharing the counter                |
+| ------------- | ----------- | -------------------------------------------- |
+| Book          | 10 / minute | `POST /api/public/:username/:eventSlug/book` |
+| Log in        | 10 / minute | `POST /api/auth/login`, `POST /login`        |
+| Register      | 5 / hour    | `POST /api/auth/register`, `POST /register`  |
+| Guest cancel  | 20 / minute | `GET`/`POST /booking/:id/cancel`             |
+| Avatar upload | 20 / hour   | `POST /dashboard/settings/avatar`            |
 
 The JSON API and the HTML form for one action **must** share a bucket, otherwise an attacker
 doubles their budget by alternating entry points.
@@ -745,6 +813,7 @@ users
 event_types
 availability_rules
 bookings
+saved_locations
 ```
 
 See [ERD.md](ERD.md) for the complete schema.
@@ -775,6 +844,7 @@ Used for:
 - event types
 - availability
 - bookings
+- saved locations
 
 ### KV
 
@@ -804,22 +874,21 @@ Future use:
 
 ### Queues
 
-Do not use initially.
+**In use** — transactional email (see §23). A deliberate departure from the original "do not use
+initially" position once email shipped.
 
 Future use:
 
-- Confirmation emails
-- Reminder emails
 - Calendar synchronization
 - Webhook processing
 
 ### Cron Triggers
 
-Do not use initially.
+**In use** — hourly reminder sweep for bookings starting in ~24 hours, de-duplicated via
+`bookings.reminder_sent_at`.
 
 Future use:
 
-- Booking reminders
 - Maintenance
 - Cleanup
 - Calendar synchronization
@@ -884,7 +953,7 @@ Do NOT build these in MVP:
 - Calendar synchronization
 - Guest self-service reschedule (cancel is implemented; see §17)
 - Date-specific availability overrides and holidays
-- Buffers, minimum notice, daily booking limits
+- Buffer **before** meetings, minimum notice, daily booking limits
 
 These may be added later.
 
@@ -964,6 +1033,7 @@ MVP is complete when:
 - Booking is stored in D1
 - Booked slot becomes unavailable
 - Double booking is prevented
+- Buffer keeps same-type meetings from being back-to-back
 - Host can see bookings
 - Host can cancel bookings
 - Timezones work correctly
