@@ -11,6 +11,8 @@ import { nowIso } from "../lib/time";
 import {
   ValidationError,
   isEventSlug,
+  isLocationType,
+  normalizeLocationValue,
   optionalString,
   requireInt,
   requireString,
@@ -41,12 +43,32 @@ eventTypeRoutes.post("/", async (c) => {
     const description = optionalString(body, "description");
     const durationMinutes = requireInt(body, "duration_minutes", { min: 5, max: 480 });
 
+    const locationType = String(body.location_type ?? "none");
+    if (!isLocationType(locationType)) {
+      throw new ValidationError(
+        "location_type",
+        "location_type must be one of none, google_meet, zoom, in_person, phone",
+      );
+    }
+    const locationValue = normalizeLocationValue(
+      locationType,
+      optionalString(body, "location_value", 300) ?? "",
+    );
+    if (locationType !== "none" && !locationValue) {
+      throw new ValidationError(
+        "location_value",
+        "location_value is required when a location is set",
+      );
+    }
+
     const eventType = await insertEventType(c.env.DB, {
       userId: user.id,
       name,
       slug,
       description,
       durationMinutes,
+      locationType,
+      locationValue,
       now: nowIso(),
     });
     return c.json({ eventType }, 201);
@@ -76,6 +98,30 @@ eventTypeRoutes.patch("/:id", async (c) => {
     .json<Record<string, unknown>>()
     .catch(() => ({}) as Record<string, unknown>);
   try {
+    let locationType = current.location_type;
+    let locationValue = current.location_value;
+    if (body.location_type !== undefined || body.location_value !== undefined) {
+      locationType =
+        body.location_type === undefined ? current.location_type : String(body.location_type);
+      if (!isLocationType(locationType)) {
+        throw new ValidationError(
+          "location_type",
+          "location_type must be one of none, google_meet, zoom, in_person, phone",
+        );
+      }
+      const rawValue =
+        body.location_value === undefined
+          ? (current.location_value ?? "")
+          : (optionalString(body, "location_value", 300) ?? "");
+      locationValue = normalizeLocationValue(locationType, rawValue);
+      if (locationType !== "none" && !locationValue) {
+        throw new ValidationError(
+          "location_value",
+          "location_value is required when a location is set",
+        );
+      }
+    }
+
     const merged = {
       name: body.name === undefined ? current.name : requireString(body, "name", { max: 100 }),
       slug:
@@ -88,6 +134,8 @@ eventTypeRoutes.patch("/:id", async (c) => {
         body.duration_minutes === undefined
           ? current.duration_minutes
           : requireInt(body, "duration_minutes", { min: 5, max: 480 }),
+      locationType,
+      locationValue,
       isActive:
         body.is_active === undefined
           ? current.is_active
@@ -122,6 +170,8 @@ eventTypeRoutes.delete("/:id", async (c) => {
       slug: current.slug,
       description: current.description,
       durationMinutes: current.duration_minutes,
+      locationType: current.location_type,
+      locationValue: current.location_value,
       isActive: 0,
       now: nowIso(),
     });

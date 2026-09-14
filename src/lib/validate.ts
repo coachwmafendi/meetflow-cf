@@ -49,6 +49,27 @@ export function isYmd(value: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
 }
 
+export const LOCATION_TYPES = ["none", "google_meet", "zoom", "in_person", "phone"] as const;
+
+export type LocationType = (typeof LOCATION_TYPES)[number];
+
+export function isLocationType(value: string): value is LocationType {
+  return (LOCATION_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * Normalizes a location value: link types get an https:// prefix when the host
+ * pasted a bare domain. Empty values collapse to null.
+ */
+export function normalizeLocationValue(type: string, value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if ((type === "google_meet" || type === "zoom") && !/^https?:\/\//i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+}
+
 export class ValidationError extends Error {
   constructor(
     public readonly field: string,

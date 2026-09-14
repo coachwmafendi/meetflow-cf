@@ -41,8 +41,30 @@ const EMBED_SCRIPT = `
           slug: '',
           duration: 30,
           description: '',
+          locationType: 'none',
+          locationValue: '',
           error: '',
           submitting: false,
+
+          locationLabel() {
+            var labels = {
+              google_meet: 'Meeting link',
+              zoom: 'Meeting link',
+              in_person: 'Address',
+              phone: 'Phone number',
+            };
+            return labels[this.locationType] || 'Location';
+          },
+
+          locationPlaceholder() {
+            var placeholders = {
+              google_meet: 'https://meet.google.com/…',
+              zoom: 'https://zoom.us/j/…',
+              in_person: 'Office address',
+              phone: '+60 …',
+            };
+            return placeholders[this.locationType] || '';
+          },
 
           async submit() {
             this.submitting = true;
@@ -56,6 +78,8 @@ const EMBED_SCRIPT = `
                   slug: this.slug.trim().toLowerCase(),
                   duration_minutes: Number(this.duration),
                   description: this.description.trim() || null,
+                  location_type: this.locationType,
+                  location_value: this.locationValue.trim() || null,
                 }),
               });
               if (res.status === 201) {
@@ -395,6 +419,21 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
               <textarea class="ui-input resize-y" id="et_description" rows="3" x-model="description"
                         placeholder="A 30-minute intro call"></textarea>
             </div>
+            <div class="ui-fieldset">
+              <label class="ui-label" for="et_location_type">Location</label>
+              <select class="ui-select" id="et_location_type" x-model="locationType">
+                <option value="none">No location</option>
+                <option value="google_meet">Google Meet</option>
+                <option value="zoom">Zoom</option>
+                <option value="in_person">In person</option>
+                <option value="phone">Phone</option>
+              </select>
+            </div>
+            <div class="ui-fieldset" x-show="locationType !== 'none'">
+              <label class="ui-label" for="et_location_value" x-text="locationLabel()"></label>
+              <input class="ui-input" id="et_location_value" x-model="locationValue"
+                     :placeholder="locationPlaceholder()" required>
+            </div>
             <div class="flex justify-end gap-2 pt-1">
               <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm" data-dialog-close>Cancel</button>
               <button class="ui-btn ui-btn-primary ui-btn-sm" type="submit" :disabled="submitting">
@@ -480,6 +519,34 @@ export function eventTypeEditPage(
             label: "Description",
             required: false,
             value: eventType.description ?? "",
+          })}
+          ${field({
+            name: "location_type",
+            label: "Location",
+            required: false,
+            controlHtml: `<select class="ui-select" id="location_type" name="location_type">
+              ${["none", "google_meet", "zoom", "in_person", "phone"]
+                .map(
+                  (t) =>
+                    `<option value="${t}"${eventType.location_type === t ? " selected" : ""}>${
+                      {
+                        none: "No location",
+                        google_meet: "Google Meet",
+                        zoom: "Zoom",
+                        in_person: "In person",
+                        phone: "Phone",
+                      }[t]
+                    }</option>`,
+                )
+                .join("")}
+            </select>`,
+          })}
+          ${field({
+            name: "location_value",
+            label: "Location details",
+            required: false,
+            value: eventType.location_value ?? "",
+            hint: "Meeting link, address or phone number — guests will see it on the booking page.",
           })}
           <div class="flex justify-end border-t border-line pt-4">
             ${button({ label: "Save changes", variant: "primary", icon: "check" })}

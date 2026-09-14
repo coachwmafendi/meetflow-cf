@@ -50,6 +50,60 @@ describe("event types", () => {
     expect(res.status).toBe(400);
   });
 
+  it("stores a location and normalizes bare meeting links", async () => {
+    const host = await createHost("wan");
+    const created = await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify({
+        name: "C",
+        slug: "c",
+        duration_minutes: 30,
+        location_type: "google_meet",
+        location_value: "meet.google.com/abc-xyz",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const { eventType } = await created.json<{
+      eventType: { location_type: string; location_value: string | null };
+    }>();
+    expect(eventType.location_type).toBe("google_meet");
+    expect(eventType.location_value).toBe("https://meet.google.com/abc-xyz");
+  });
+
+  it("rejects an unknown location type", async () => {
+    const host = await createHost("wan");
+    const res = await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify({
+        name: "C",
+        slug: "c",
+        duration_minutes: 30,
+        location_type: "teams",
+        location_value: "https://example.com",
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("requires a value when a location is set", async () => {
+    const host = await createHost("wan");
+    const res = await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify({
+        name: "C",
+        slug: "c",
+        duration_minutes: 30,
+        location_type: "in_person",
+      }),
+    });
+    expect(res.status).toBe(400);
+    const { error } = await res.json<{ error: string }>();
+    expect(error).toContain("location_value");
+  });
+
   it("does not leak another host's event type", async () => {
     const wan = await createHost("wan");
     const ali = await createHost("ali");

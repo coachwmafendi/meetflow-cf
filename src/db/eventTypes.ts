@@ -53,6 +53,8 @@ export interface InsertEventTypeInput {
   slug: string;
   description: string | null;
   durationMinutes: number;
+  locationType: string;
+  locationValue: string | null;
   now: string;
 }
 
@@ -62,8 +64,8 @@ export async function insertEventType(
 ): Promise<EventTypeRow> {
   const row = await db
     .prepare(
-      `INSERT INTO event_types (user_id, name, slug, description, duration_minutes, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+      `INSERT INTO event_types (user_id, name, slug, description, duration_minutes, location_type, location_value, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
        RETURNING *`,
     )
     .bind(
@@ -72,6 +74,8 @@ export async function insertEventType(
       input.slug,
       input.description,
       input.durationMinutes,
+      input.locationType,
+      input.locationValue,
       input.now,
       input.now,
     )
@@ -85,6 +89,8 @@ export interface UpdateEventTypeInput {
   slug: string;
   description: string | null;
   durationMinutes: number;
+  locationType: string;
+  locationValue: string | null;
   isActive: number;
   now: string;
 }
@@ -98,7 +104,8 @@ export async function updateEventType(
   return db
     .prepare(
       `UPDATE event_types
-       SET name = ?, slug = ?, description = ?, duration_minutes = ?, is_active = ?, updated_at = ?
+       SET name = ?, slug = ?, description = ?, duration_minutes = ?,
+           location_type = ?, location_value = ?, is_active = ?, updated_at = ?
        WHERE id = ? AND user_id = ?
        RETURNING *`,
     )
@@ -107,6 +114,8 @@ export async function updateEventType(
       input.slug,
       input.description,
       input.durationMinutes,
+      input.locationType,
+      input.locationValue,
       input.isActive,
       input.now,
       id,

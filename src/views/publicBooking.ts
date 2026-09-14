@@ -6,6 +6,42 @@ import { TIMEZONE_SCRIPT } from "./timezoneSelect";
 import type { BookingRow, EventTypeRow, PublicUser } from "../types";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+const LOCATION_LABELS: Record<string, string> = {
+  google_meet: "Google Meet",
+  zoom: "Zoom",
+  in_person: "In person",
+  phone: "Phone",
+};
+
+/** Where the meeting happens: a join link, an address, or a phone number. */
+function locationHtml(eventType: EventTypeRow): string {
+  if (eventType.location_type === "none" || !eventType.location_value) return "";
+  const value = escapeHtml(eventType.location_value);
+  const label = LOCATION_LABELS[eventType.location_type] ?? "Location";
+  const base = "mt-2 flex items-center gap-2 text-[0.8125rem]";
+
+  if (eventType.location_type === "in_person") {
+    return `<p class="${base} text-body">${icon("mapPin", "size-4 shrink-0 text-muted")}<span>${value}</span></p>`;
+  }
+  if (eventType.location_type === "phone") {
+    return `<a class="${base} font-medium text-accent hover:underline" href="tel:${value}">${icon("phone", "size-4 shrink-0")}<span>${value}</span></a>`;
+  }
+  return `<a class="${base} font-medium text-accent hover:underline" href="${value}" target="_blank" rel="noopener">${icon("video", "size-4 shrink-0")}<span>${label}</span></a>`;
+}
+
+/** One-line location for the confirmation page's detail list. */
+function locationLine(eventType: EventTypeRow): string {
+  const value = escapeHtml(eventType.location_value ?? "");
+  const label = LOCATION_LABELS[eventType.location_type] ?? "Location";
+  if (eventType.location_type === "google_meet" || eventType.location_type === "zoom") {
+    return `<a class="font-medium text-accent hover:underline" href="${value}" target="_blank" rel="noopener">${label}</a>`;
+  }
+  if (eventType.location_type === "phone") {
+    return `<a class="font-medium text-accent hover:underline" href="tel:${value}">${value}</a>`;
+  }
+  return `<span class="text-body">${value}</span>`;
+}
 const MONTHS = [
   "January",
   "February",
@@ -124,6 +160,8 @@ export function bookingPage(host: PublicUser, eventType: EventTypeRow): string {
                   <span class="ui-time">${eventType.duration_minutes}m</span>
                 </span>
               </div>
+
+              ${locationHtml(eventType)}
 
               <div class="mt-3.5">
                 <label class="ui-label" for="guest-timezone">Timezone</label>
@@ -661,6 +699,11 @@ export function confirmationPage(
             ${row("Time", `<span class="ui-time font-medium">${escapeHtml(timeLine)}</span>`)}
             ${row("Timezone", escapeHtml(zoneDisplay(booking.timezone)))}
             ${row("Duration", `<span class="ui-time">${eventType.duration_minutes} min</span>`)}
+            ${
+              eventType.location_type !== "none" && eventType.location_value
+                ? row("Location", locationLine(eventType))
+                : ""
+            }
             ${row("Status", badge("success", "Confirmed"))}
           </dl>
 

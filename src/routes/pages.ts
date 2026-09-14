@@ -19,7 +19,7 @@ import { cancelPath } from "../lib/cancelToken";
 import { toMinutes } from "../lib/slots";
 import { isoUtc, nowIso } from "../lib/time";
 import { isValidTimeZone, zonedDateString, zonedToUtc } from "../lib/timezone";
-import { isEventSlug, isHhmm } from "../lib/validate";
+import { isEventSlug, isHhmm, isLocationType, normalizeLocationValue } from "../lib/validate";
 import { clearSession, issueSession } from "../middleware/auth";
 import { LIMITS, rateLimit } from "../middleware/rateLimit";
 import { AuthError, login, register } from "../services/auth";
@@ -154,6 +154,10 @@ dashboard.post("/event-types", async (c) => {
   const form = await c.req.parseBody();
   const slug = String(form.slug ?? "").toLowerCase();
   const duration = Number(form.duration_minutes);
+  const locationType = isLocationType(String(form.location_type ?? ""))
+    ? String(form.location_type)
+    : "none";
+  const locationValue = normalizeLocationValue(locationType, String(form.location_value ?? ""));
   let ok = false;
   if (isEventSlug(slug) && Number.isInteger(duration) && duration >= 5 && duration <= 480) {
     try {
@@ -163,6 +167,8 @@ dashboard.post("/event-types", async (c) => {
         slug,
         description: form.description ? String(form.description).trim() : null,
         durationMinutes: duration,
+        locationType,
+        locationValue: locationType === "none" ? null : locationValue,
         now: nowIso(),
       });
       ok = true;
@@ -194,6 +200,10 @@ dashboard.post("/event-types/:id", async (c) => {
   const name = String(form.name ?? "").trim();
   const slug = String(form.slug ?? "").toLowerCase();
   const duration = Number(form.duration_minutes);
+  const locationType = isLocationType(String(form.location_type ?? ""))
+    ? String(form.location_type)
+    : "none";
+  const locationValue = normalizeLocationValue(locationType, String(form.location_value ?? ""));
   const bookings = await countBookingsForEventType(c.env.DB, id);
 
   // Re-render with what the host typed, so a validation error never wipes
@@ -205,6 +215,8 @@ dashboard.post("/event-types/:id", async (c) => {
     duration_minutes: Number.isInteger(duration) ? duration : current.duration_minutes,
     description:
       form.description !== undefined ? String(form.description).trim() : current.description,
+    location_type: locationType,
+    location_value: locationValue ?? "",
   };
 
   const invalid =
@@ -214,7 +226,9 @@ dashboard.post("/event-types/:id", async (c) => {
         ? "URL slug must be lowercase letters, digits and dashes."
         : !Number.isInteger(duration) || duration < 5 || duration > 480
           ? "Duration must be between 5 and 480 minutes."
-          : null;
+          : locationType !== "none" && !locationValue
+            ? "Location needs an address, link or number."
+            : null;
   if (invalid) return html(eventTypeEditPage(user, draft, bookings, invalid), 400);
 
   try {
@@ -223,6 +237,8 @@ dashboard.post("/event-types/:id", async (c) => {
       slug,
       description: form.description ? String(form.description).trim() : null,
       durationMinutes: duration,
+      locationType,
+      locationValue: locationType === "none" ? null : locationValue,
       isActive: current.is_active,
       now: nowIso(),
     });
@@ -247,6 +263,8 @@ dashboard.post("/event-types/:id/toggle", async (c) => {
     slug: current.slug,
     description: current.description,
     durationMinutes: current.duration_minutes,
+    locationType: current.location_type,
+    locationValue: current.location_value,
     isActive: current.is_active === 1 ? 0 : 1,
     now: nowIso(),
   });
@@ -271,6 +289,8 @@ dashboard.post("/event-types/:id/delete", async (c) => {
       slug: current.slug,
       description: current.description,
       durationMinutes: current.duration_minutes,
+      locationType: current.location_type,
+      locationValue: current.location_value,
       isActive: 0,
       now: nowIso(),
     });
@@ -300,6 +320,8 @@ dashboard.post("/event-types/:id/clone", async (c) => {
         slug: candidate,
         description: current.description,
         durationMinutes: current.duration_minutes,
+        locationType: current.location_type,
+        locationValue: current.location_value,
         now,
       });
       cloned = true;

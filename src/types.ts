@@ -28,6 +28,10 @@ export interface EventTypeRow {
   description: string | null;
   duration_minutes: number;
   is_active: number;
+  /** "none" | "google_meet" | "zoom" | "in_person" | "phone" */
+  location_type: string;
+  /** Meet/Zoom URL, street address, or phone number; null when unset. */
+  location_value: string | null;
   created_at: string;
   updated_at: string;
 }

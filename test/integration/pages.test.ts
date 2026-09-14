@@ -121,6 +121,26 @@ describe("pages", () => {
     expect(html).toContain("typed desc");
   });
 
+  it("shows the meeting location on the booking page", async () => {
+    const host = await createHost("wan");
+    await SELF.fetch("https://example.com/api/event-types", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({
+        name: "Consultation",
+        slug: "consultation",
+        duration_minutes: 30,
+        location_type: "zoom",
+        location_value: "https://zoom.us/j/123456",
+      }),
+    });
+    const res = await SELF.fetch("https://example.com/wan/consultation");
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Zoom");
+    expect(html).toContain("https://zoom.us/j/123456");
+  });
+
   it("escapes host-controlled text", async () => {
     const host = await createHost("wan");
     await SELF.fetch("https://example.com/api/event-types", {
