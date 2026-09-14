@@ -34,6 +34,8 @@ describe("getMonthFreeDays", () => {
     const days = await getMonthFreeDays(env.DB, {
       ...BASE,
       hostId: host.id,
+      eventTypeId,
+      bufferMinutes: 0,
       year: 2026,
       month: 9,
     });
@@ -45,6 +47,8 @@ describe("getMonthFreeDays", () => {
     const days = await getMonthFreeDays(env.DB, {
       ...BASE,
       hostId: host.id,
+      eventTypeId,
+      bufferMinutes: 0,
       year: 2026,
       month: 8,
     });
@@ -56,6 +60,8 @@ describe("getMonthFreeDays", () => {
     const days = await getMonthFreeDays(env.DB, {
       ...BASE,
       hostId: host.id,
+      eventTypeId,
+      bufferMinutes: 0,
       year: 2026,
       month: 9,
       nowMs: Date.parse("2026-09-10T00:00:00Z"),
@@ -76,6 +82,38 @@ describe("getMonthFreeDays", () => {
     const days = await getMonthFreeDays(env.DB, {
       ...BASE,
       hostId: host.id,
+      eventTypeId,
+      bufferMinutes: 0,
+      year: 2026,
+      month: 9,
+    });
+    expect(days).toEqual(["2026-09-07", "2026-09-21", "2026-09-28"]);
+  });
+
+  it("respects the buffer for same-type bookings", async () => {
+    const { host, eventTypeId } = await seed();
+    const now = "2026-09-01T00:00:00Z";
+    // Fully books Monday 09-14 (09:00-11:00 local): the day drops regardless.
+    await env.DB.prepare(
+      `INSERT INTO bookings (user_id,event_type_id,guest_name,guest_email,start_at,end_at,timezone,status,created_at,updated_at)
+       VALUES (?,?,'G','g@example.com','2026-09-14T01:00:00Z','2026-09-14T03:00:00Z','UTC','confirmed',?,?)`,
+    )
+      .bind(host.id, eventTypeId, now, now)
+      .run();
+    // Books only 09:00-09:30 on Monday 09-21: with a 15-min buffer the 09:30
+    // slot dies, but 10:00/10:30 stay free and the day remains bookable.
+    await env.DB.prepare(
+      `INSERT INTO bookings (user_id,event_type_id,guest_name,guest_email,start_at,end_at,timezone,status,created_at,updated_at)
+       VALUES (?,?,'H','h@example.com','2026-09-21T01:00:00Z','2026-09-21T01:30:00Z','UTC','confirmed',?,?)`,
+    )
+      .bind(host.id, eventTypeId, now, now)
+      .run();
+
+    const days = await getMonthFreeDays(env.DB, {
+      ...BASE,
+      hostId: host.id,
+      eventTypeId,
+      bufferMinutes: 15,
       year: 2026,
       month: 9,
     });
@@ -87,6 +125,8 @@ describe("getMonthFreeDays", () => {
     const days = await getMonthFreeDays(env.DB, {
       ...BASE,
       hostId: host.id,
+      eventTypeId: 0,
+      bufferMinutes: 0,
       year: 2026,
       month: 9,
     });
@@ -109,6 +149,8 @@ describe("getMonthFreeDays", () => {
     const days = await getMonthFreeDays(env.DB, {
       ...BASE,
       hostId: host.id,
+      eventTypeId: 0,
+      bufferMinutes: 0,
       year: 2028,
       month: 2,
     });

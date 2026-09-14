@@ -17,6 +17,7 @@ export interface SlotQuery {
   hostTimezone: string;
   eventTypeId: number;
   durationMinutes: number;
+  bufferMinutes: number;
   dateYmd: string;
   nowMs: number;
 }
@@ -24,7 +25,9 @@ export interface SlotQuery {
 export interface MonthQuery {
   hostId: number;
   hostTimezone: string;
+  eventTypeId: number;
   durationMinutes: number;
+  bufferMinutes: number;
   /** 1-12 */
   month: number;
   year: number;
@@ -84,7 +87,8 @@ export async function getDaySlots(db: D1Database, q: SlotQuery): Promise<DaySlot
   );
   const busy: Interval[] = busyRows.map((b) => ({
     startMs: Date.parse(b.start_at),
-    endMs: Date.parse(b.end_at),
+    endMs:
+      Date.parse(b.end_at) + (b.event_type_id === q.eventTypeId ? q.bufferMinutes * 60_000 : 0),
   }));
 
   const toSlot = (slot: Interval): Slot => ({
@@ -149,7 +153,8 @@ export async function getMonthFreeDays(db: D1Database, q: MonthQuery): Promise<s
   );
   const busy: Interval[] = busyRows.map((b) => ({
     startMs: Date.parse(b.start_at),
-    endMs: Date.parse(b.end_at),
+    endMs:
+      Date.parse(b.end_at) + (b.event_type_id === q.eventTypeId ? q.bufferMinutes * 60_000 : 0),
   }));
 
   const freeDays: string[] = [];

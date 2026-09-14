@@ -90,6 +90,7 @@ export async function createBooking(
     hostTimezone: host.timezone,
     eventTypeId: eventType.id,
     durationMinutes: eventType.duration_minutes,
+    bufferMinutes: eventType.buffer_minutes,
     dateYmd: hostDate,
     nowMs,
   });

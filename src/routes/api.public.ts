@@ -46,6 +46,7 @@ publicRoutes.get("/:username/:eventSlug/slots", async (c) => {
       hostTimezone: host.timezone,
       eventTypeId: eventType.id,
       durationMinutes: eventType.duration_minutes,
+      bufferMinutes: eventType.buffer_minutes,
       dateYmd: date,
       nowMs: Date.now(),
     });
@@ -79,7 +80,9 @@ publicRoutes.get("/:username/:eventSlug/month", async (c) => {
     const days = await getMonthFreeDays(c.env.DB, {
       hostId: host.id,
       hostTimezone: host.timezone,
+      eventTypeId: eventType.id,
       durationMinutes: eventType.duration_minutes,
+      bufferMinutes: eventType.buffer_minutes,
       year,
       month,
       nowMs: Date.now(),

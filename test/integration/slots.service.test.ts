@@ -35,6 +35,7 @@ describe("getSlotsForDate", () => {
       ...BASE,
       hostId: host.id,
       eventTypeId,
+      bufferMinutes: 0,
       dateYmd: "2026-09-21",
     });
     expect(slots.map((s) => s.startAt)).toEqual([
@@ -52,6 +53,7 @@ describe("getSlotsForDate", () => {
       ...BASE,
       hostId: host.id,
       eventTypeId,
+      bufferMinutes: 0,
       dateYmd: "2026-09-22",
     });
     expect(slots).toEqual([]);
@@ -63,6 +65,7 @@ describe("getSlotsForDate", () => {
       ...BASE,
       hostId: host.id,
       eventTypeId,
+      bufferMinutes: 0,
       dateYmd: "2026-09-21",
       nowMs: Date.parse("2026-09-21T01:45:00Z"),
     });
@@ -83,6 +86,7 @@ describe("getSlotsForDate", () => {
       ...BASE,
       hostId: host.id,
       eventTypeId,
+      bufferMinutes: 0,
       dateYmd: "2026-09-21",
     });
     expect(slots.map((s) => s.startAt)).toEqual([
@@ -106,8 +110,62 @@ describe("getSlotsForDate", () => {
       ...BASE,
       hostId: host.id,
       eventTypeId,
+      bufferMinutes: 0,
       dateYmd: "2026-09-21",
     });
     expect(slots).toHaveLength(4);
+  });
+
+  it("expands same-type bookings by the buffer", async () => {
+    const { host, eventTypeId } = await seed();
+    const now = "2026-09-01T00:00:00Z";
+    await env.DB.prepare(
+      `INSERT INTO bookings (user_id,event_type_id,guest_name,guest_email,start_at,end_at,timezone,status,created_at,updated_at)
+       VALUES (?,?,'G','g@example.com','2026-09-21T01:00:00Z','2026-09-21T01:30:00Z','UTC','confirmed',?,?)`,
+    )
+      .bind(host.id, eventTypeId, now, now)
+      .run();
+
+    const slots = await getSlotsForDate(env.DB, {
+      ...BASE,
+      hostId: host.id,
+      eventTypeId,
+      bufferMinutes: 15,
+      dateYmd: "2026-09-21",
+    });
+    // 09:00 local slot taken; 09:30 local falls inside the 15-min buffer.
+    expect(slots.map((s) => s.startAt)).toEqual(["2026-09-21T02:00:00Z", "2026-09-21T02:30:00Z"]);
+  });
+
+  it("does not expand other event types' bookings", async () => {
+    const { host, eventTypeId } = await seed();
+    const now = "2026-09-01T00:00:00Z";
+    // Create a second real event type for the FK, then book 09:00-09:30 on it.
+    const other = await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify({ name: "Other", slug: "other", duration_minutes: 30 }),
+    });
+    const { eventType: otherType } = await other.json<{ eventType: { id: number } }>();
+    await env.DB.prepare(
+      `INSERT INTO bookings (user_id,event_type_id,guest_name,guest_email,start_at,end_at,timezone,status,created_at,updated_at)
+       VALUES (?,?,'G','g@example.com','2026-09-21T01:00:00Z','2026-09-21T01:30:00Z','UTC','confirmed',?,?)`,
+    )
+      .bind(host.id, otherType.id, now, now)
+      .run();
+
+    const slots = await getSlotsForDate(env.DB, {
+      ...BASE,
+      hostId: host.id,
+      eventTypeId,
+      bufferMinutes: 15,
+      dateYmd: "2026-09-21",
+    });
+    // Raw overlap only: 09:30 local is bookable again.
+    expect(slots.map((s) => s.startAt)).toEqual([
+      "2026-09-21T01:30:00Z",
+      "2026-09-21T02:00:00Z",
+      "2026-09-21T02:30:00Z",
+    ]);
   });
 });
