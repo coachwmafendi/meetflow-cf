@@ -36,5 +36,7 @@ export default defineConfig({
   ],
   test: {
     setupFiles: ["./test/setup.ts"],
+    // Git worktrees under .worktrees/ carry their own copies of the suite.
+    exclude: ["**/node_modules/**", ".worktrees/**"],
   },
 });
