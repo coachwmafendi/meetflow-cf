@@ -4,7 +4,7 @@
 
 MeetFlow uses Cloudflare D1 as the primary relational database.
 
-The MVP contains five tables:
+The MVP contains six tables:
 
 ```text
 users
@@ -12,6 +12,7 @@ event_types
 availability_rules
 bookings
 saved_locations
+google_connections
 ```
 
 Relationship:
@@ -28,6 +29,8 @@ users
   |          +---- event_types
   |
   +----< saved_locations
+  |
+  +----< google_connections
 ```
 
 Rendered diagram: [erd.png](erd.png)
@@ -43,6 +46,7 @@ erDiagram
     USERS ||--o{ AVAILABILITY_RULES : defines
     USERS ||--o{ BOOKINGS : hosts
     USERS ||--o{ SAVED_LOCATIONS : remembers
+    USERS ||--o| GOOGLE_CONNECTIONS : "links (read-only)"
     EVENT_TYPES ||--o{ BOOKINGS : receives
 
     USERS {
@@ -105,6 +109,16 @@ erDiagram
         TEXT location_type
         TEXT location_value
         TEXT created_at
+    }
+
+    GOOGLE_CONNECTIONS {
+        INTEGER user_id PK, FK
+        TEXT google_email
+        TEXT enc_refresh
+        TEXT enc_access
+        INTEGER access_expires_at
+        TEXT created_at
+        TEXT updated_at
     }
 ```
 
@@ -345,9 +359,37 @@ Only link types are stored here; `in_person` and `phone` values are not remember
 
 ---
 
-## 8. SQL Schema
+## 8. `google_connections`
 
-Initial D1 schema and subsequent migrations (`migrations/0001_initial.sql` … `0006_buffer_minutes.sql`):
+One read-only Google Calendar connection per host. OAuth tokens are stored encrypted
+(AES-GCM, keyed by the `GOOGLE_TOKEN_KEY` secret) and rotated on use; `google_email` doubles as the
+freeBusy calendar id (`primary` fallback when the id_token cannot be read).
+
+| Column            | Type    | Required | Description                                         |
+| ----------------- | ------- | -------- | --------------------------------------------------- |
+| user_id           | INTEGER | Yes      | Primary key and foreign key to `users`              |
+| google_email      | TEXT    | Yes      | Connected Google account, also the freeBusy id      |
+| enc_refresh       | TEXT    | Yes      | AES-GCM base64 refresh token                        |
+| enc_access        | TEXT    | Yes      | AES-GCM base64 access token                         |
+| access_expires_at | INTEGER | Yes      | Epoch ms when the stored access token stops working |
+| created_at        | TEXT    | Yes      | Connected-at timestamp                              |
+| updated_at        | TEXT    | Yes      | Last token rotation or reconnect                    |
+
+Foreign key:
+
+```text
+google_connections.user_id
+    ->
+users.id
+```
+
+Reconnecting upserts on `user_id`, so there is exactly one row per host.
+
+---
+
+## 9. SQL Schema
+
+Initial D1 schema and subsequent migrations (`migrations/0001_initial.sql` … `0007_google_connections.sql`):
 
 ```sql
 PRAGMA foreign_keys = ON;
@@ -444,11 +486,23 @@ CREATE TABLE saved_locations (
 
     UNIQUE(user_id, location_type, location_value)
 );
+
+-- 0007_google_connections.sql
+CREATE TABLE google_connections (
+    user_id INTEGER PRIMARY KEY,
+    google_email TEXT NOT NULL,
+    enc_refresh TEXT NOT NULL,
+    enc_access TEXT NOT NULL,
+    access_expires_at INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 ```
 
 ---
 
-## 9. Indexes
+## 10. Indexes
 
 ```sql
 CREATE INDEX idx_event_types_user_id
@@ -488,7 +542,7 @@ ON saved_locations(user_id, location_type);
 
 ---
 
-## 10. Booking Overlap
+## 11. Booking Overlap
 
 A booking overlaps another booking when:
 
@@ -552,7 +606,7 @@ AND NOT EXISTS (
 
 ---
 
-## 11. Booking Creation Logic
+## 12. Booking Creation Logic
 
 The application must NOT trust the availability returned to the browser.
 
@@ -576,7 +630,7 @@ The availability and overlap checks must happen on the server.
 
 ---
 
-## 12. Data Ownership
+## 13. Data Ownership
 
 A host owns:
 
@@ -607,7 +661,7 @@ Never load an event type only by ID for an authenticated operation.
 
 ---
 
-## 13. Deletion Rules
+## 14. Deletion Rules
 
 ### User
 
@@ -640,7 +694,7 @@ status = 'cancelled'
 
 ---
 
-## 14. Timezone Strategy
+## 15. Timezone Strategy
 
 Store booking timestamps in UTC.
 
@@ -679,14 +733,12 @@ Conversion is done with `Intl.DateTimeFormat` + `formatToParts` (full ICU is ava
 
 ---
 
-## 15. Future Tables
+## 16. Future Tables
 
 Do NOT create these tables in the initial MVP unless the feature is actually being implemented:
 
 ```text
 sessions
-calendar_connections
-calendar_events
 availability_overrides
 booking_questions
 booking_answers
@@ -708,8 +760,6 @@ users
  |
  +-- availability_overrides
  |
- +-- calendar_connections
- |
  +-- bookings
        |
        +-- booking_questions
@@ -719,7 +769,7 @@ users
 
 ---
 
-## 16. Cloudflare Service Mapping
+## 17. Cloudflare Service Mapping
 
 ### D1
 
@@ -732,6 +782,7 @@ Store:
 - Availability
 - Bookings
 - Saved locations
+- Google connections (read-only busy)
 
 ### KV
 
@@ -762,7 +813,7 @@ booking id only; the consumer re-reads D1 at send time.
 
 ---
 
-## 17. Database Principle
+## 18. Database Principle
 
 D1 is the source of truth.
 
@@ -779,7 +830,7 @@ in KV or R2.
 
 ---
 
-## 18. MVP Database Philosophy
+## 19. MVP Database Philosophy
 
 Keep the schema small.
 

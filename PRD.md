@@ -814,6 +814,7 @@ event_types
 availability_rules
 bookings
 saved_locations
+google_connections
 ```
 
 See [ERD.md](ERD.md) for the complete schema.
@@ -845,6 +846,7 @@ Used for:
 - availability
 - bookings
 - saved locations
+- google connections
 
 ### KV
 
@@ -931,7 +933,8 @@ Rules:
 
 Do NOT build these in MVP:
 
-- Google Calendar
+- Google Calendar sync (writing MeetFlow bookings into Google). The read-only Google busy
+  conflict check is implemented — see `docs/superpowers/specs/2026-09-14-google-calendar-connection-design.md`
 - Microsoft Outlook
 - Apple Calendar
 - Google Meet
