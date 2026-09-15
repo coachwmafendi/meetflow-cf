@@ -13,6 +13,8 @@ export const RESERVED_SLUGS = new Set([
   "settings",
   "healthz",
   "app",
+  "privacy",
+  "terms",
 ]);
 
 /** Public usernames: 3-32 chars, so the /:username namespace stays readable. */
