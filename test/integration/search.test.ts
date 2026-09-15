@@ -76,7 +76,8 @@ describe("GET /api/search", () => {
   });
 
   it("never returns another host's data", async () => {
-    await seedHost("wan");
+    const wan = await seedHost("wan");
+    await book(wan.host, "2026-09-21T05:00:00Z", "Ahmad Zulkifli", "ahmad@example.com");
     const ali = await seedHost("ali");
     const res = await api("/api/search?q=ahmad", { cookie: ali.host.cookie });
     const body = await res.json<{ bookings: unknown[] }>();
