@@ -258,6 +258,15 @@
     @apply w-full rounded-lg px-4 py-2.5 text-sm;
   }
 
+  .ui-embed-tab {
+    @apply -mb-px border-b-2 border-transparent px-3 py-1.5 text-[0.8125rem]
+      font-medium text-muted hover:text-ink;
+  }
+
+  .ui-embed-tab-active {
+    @apply border-primary text-ink;
+  }
+
   /* --- Forms ------------------------------------------------------------ */
   .ui-input,
   .ui-select {

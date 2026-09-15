@@ -99,6 +99,27 @@ describe("pages", () => {
     expect(html).toContain("Buffer after meeting");
   });
 
+  it("renders inline and popup embed tabs on event type cards", async () => {
+    const host = await createHost("wan");
+    await SELF.fetch("https://example.com/api/event-types", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 30 }),
+    });
+    const res = await SELF.fetch("https://example.com/dashboard/event-types", {
+      headers: { cookie: host.cookie },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('data-embed-tab="inline"');
+    expect(html).toContain('data-embed-tab="popup"');
+    expect(html).toContain('data-embed-code-tab="inline"');
+    expect(html).toContain('data-embed-code-tab="popup"');
+    expect(html).toContain("ui-embed-tab");
+    expect(html).toContain("data-meetflow-link");
+    expect(html).toContain("/embed.js");
+  });
+
   it("renders the search box wired to the event type cards", async () => {
     const host = await createHost("wan");
     await SELF.fetch("https://example.com/api/event-types", {
