@@ -619,6 +619,22 @@ The GET **must never mutate**: mail scanners and link prefetchers follow links, 
 otherwise cancel meetings without the guest doing anything. Cancelling is idempotent, is refused
 once the meeting has ended, and notifies the host by email.
 
+### Guest rescheduling
+
+Guests can move a confirmed booking to a later slot of the same event type. Reschedule links are
+HMAC tokens over the booking id under their own purpose string (domain-separated from cancellation
+and session tokens) and are embedded in the guest confirmation email.
+
+```http
+GET  /booking/:id/reschedule?token=...   renders the reschedule page (calendar + slot grid)
+POST /booking/:id/reschedule             performs the move
+```
+
+The POST refuses bookings that are cancelled or already past, and re-runs the full availability
+check for the new slot — including the Google busy conflict check — using the same atomic
+conditional insert as booking creation, so a reschedule can never land on a slot that was taken
+in the meantime. A successful move re-sends the guest confirmation.
+
 ---
 
 ## 18. Public Booking Page
@@ -737,7 +753,12 @@ GET  /:username
 GET  /:username/:eventSlug
 GET  /booking/:id/cancel
 POST /booking/:id/cancel
+GET  /booking/:id/reschedule
+POST /booking/:id/reschedule
 GET  /booking/:id/confirmed
+GET  /oauth/google/authorize
+GET  /oauth/google/callback
+POST /dashboard/settings/calendar/disconnect
 ```
 
 ---
@@ -909,7 +930,9 @@ trigger for reminders.
 | Host cancels          | Guest     | Cancellation |
 | 24 hours before start | Guest     | Reminder     |
 
-Reschedule notification remains out of scope, since guests cannot reschedule yet.
+Guest confirmation emails include a signed reschedule link (see §17); there is no separate
+reschedule notification template. The guest is re-sent the confirmation after a successful
+reschedule.
 
 Guests can now cancel themselves through a signed link (see §17), which supersedes the earlier
 "guest self-service cancel" entry in the out-of-scope list.
@@ -954,7 +977,6 @@ Do NOT build these in MVP:
 - Workflow automation
 - AI scheduling
 - Calendar synchronization
-- Guest self-service reschedule (cancel is implemented; see §17)
 - Date-specific availability overrides and holidays
 - Buffer **before** meetings, minimum notice, daily booking limits
 

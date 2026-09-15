@@ -604,6 +604,10 @@ AND NOT EXISTS (
 `meta.changes === 0` means the slot was taken between slot listing and submission — return
 `409 Conflict`. The partial unique index in section 9 is the second line of defence.
 
+Rescheduling reuses this same atomic conditional insert: the guest's signed token identifies the
+old booking, and the move is a single statement that clears the old row and inserts the new one
+only if the target window passes both guards. A lost race leaves the original booking untouched.
+
 ---
 
 ## 12. Booking Creation Logic
@@ -691,6 +695,12 @@ Use:
 ```text
 status = 'cancelled'
 ```
+
+### Google Connection
+
+`DELETE FROM google_connections` is the disconnect action: the host keeps their account, only the
+stored tokens are dropped. The `ON DELETE CASCADE` foreign key also removes the row if the user
+row is ever deleted.
 
 ---
 

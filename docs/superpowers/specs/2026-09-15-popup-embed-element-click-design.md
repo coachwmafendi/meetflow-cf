@@ -24,11 +24,12 @@ dashboard dialog gains tabs to choose between the two.
 ```html
 <!-- MeetFlow element-click embed code begins -->
 <script>
-(function (d, s, u) {
-  var js = d.createElement(s);
-  js.src = u; js.async = true;
-  d.getElementsByTagName(s)[0].parentNode.insertBefore(js, d.getElementsByTagName(s)[0]);
-})(document, "script", "https://meetflow.wmafendi.workers.dev/embed.js");
+  (function (d, s, u) {
+    var js = d.createElement(s);
+    js.src = u;
+    js.async = true;
+    d.getElementsByTagName(s)[0].parentNode.insertBefore(js, d.getElementsByTagName(s)[0]);
+  })(document, "script", "https://meetflow.wmafendi.workers.dev/embed.js");
 </script>
 <!-- MeetFlow element-click embed code ends -->
 
