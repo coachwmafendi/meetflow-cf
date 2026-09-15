@@ -143,6 +143,146 @@ const COPY_LINK_SCRIPT = `
     })();
   </script>`;
 
+/**
+ * The ⌘K command palette. Debounced fetches to /api/search with an
+ * AbortController; results are grouped (Actions, Navigation, data groups) and
+ * navigated with ↑/↓/Enter. Everything renders via x-text, so guest-controlled
+ * strings can never inject markup.
+ */
+const PALETTE_SCRIPT = `
+  <script>
+    window.meetflowPalette = function () {
+      return {
+        open: false,
+        q: "",
+        loading: false,
+        failed: false,
+        selected: 1,
+        bookings: [],
+        eventTypes: [],
+        attendees: [],
+        controller: null,
+        timer: null,
+
+        get items() {
+          var items = [];
+          function group(name) {
+            items.push({ header: true, key: "h-" + name, label: name });
+          }
+          group("Actions");
+          items.push({ key: "new-event-type", label: "New event type", hint: "Action", href: "/dashboard/event-types" });
+          group("Navigation");
+          items.push({ key: "nav-dashboard", label: "Dashboard", hint: "", href: "/dashboard" });
+          items.push({ key: "nav-event-types", label: "Event Types", hint: "", href: "/dashboard/event-types" });
+          items.push({ key: "nav-availability", label: "Availability", hint: "", href: "/dashboard/availability" });
+          items.push({ key: "nav-bookings", label: "Appointments", hint: "", href: "/dashboard/bookings" });
+          items.push({ key: "nav-settings", label: "Settings", hint: "", href: "/dashboard/settings" });
+          if (!this.q.trim()) {
+            group("Recent");
+            for (var i = 0; i < this.bookings.length; i++) {
+              var b = this.bookings[i];
+              items.push({ key: "b" + b.id, label: b.guest_name + " — " + b.event_name, hint: b.guest_email, href: "/dashboard/bookings" });
+            }
+            return items;
+          }
+          if (this.bookings.length) {
+            group("Bookings");
+            for (var j = 0; j < this.bookings.length; j++) {
+              var r = this.bookings[j];
+              items.push({ key: "b" + r.id, label: r.guest_name + " — " + r.event_name, hint: r.guest_email, href: "/dashboard/bookings" });
+            }
+          }
+          if (this.eventTypes.length) {
+            group("Event types");
+            for (var k = 0; k < this.eventTypes.length; k++) {
+              var e = this.eventTypes[k];
+              items.push({ key: "e" + e.id, label: e.name, hint: "/" + e.slug, href: "/dashboard/event-types/" + e.id });
+            }
+          }
+          if (this.attendees.length) {
+            group("Attendees");
+            for (var m = 0; m < this.attendees.length; m++) {
+              var a = this.attendees[m];
+              items.push({ key: "a" + a.id, label: a.guest_name, hint: a.guest_email, href: "/dashboard/bookings" });
+            }
+          }
+          return items;
+        },
+
+        toggle: function () { this.open ? this.close() : this.show(); },
+        show: function () {
+          this.open = true;
+          this.q = "";
+          this.selected = 1;
+          this.bookings = [];
+          this.eventTypes = [];
+          this.attendees = [];
+          this.failed = false;
+          var self = this;
+          this.$nextTick(function () { self.$refs.input.focus(); });
+          this.fetch("");
+        },
+        close: function () {
+          if (!this.open) return;
+          this.open = false;
+          if (this.timer) clearTimeout(this.timer);
+          if (this.controller) this.controller.abort();
+          var t = document.getElementById("palette-trigger");
+          if (t) t.focus();
+        },
+        go: function (item) {
+          this.close();
+          window.location.href = item.href;
+        },
+        fetch: function (query) {
+          var self = this;
+          if (this.controller) this.controller.abort();
+          var controller = new AbortController();
+          this.controller = controller;
+          this.loading = true;
+          this.failed = false;
+          fetch("/api/search?q=" + encodeURIComponent(query), { signal: controller.signal })
+            .then(function (res) { if (!res.ok) throw new Error(res.status); return res.json(); })
+            .then(function (data) {
+              self.bookings = data.bookings || [];
+              self.eventTypes = data.eventTypes || [];
+              self.attendees = data.attendees || [];
+              self.selected = 1;
+              self.loading = false;
+              self.failed = false;
+            })
+            .catch(function () {
+              if (!controller.signal.aborted) {
+                self.loading = false;
+                self.failed = true;
+              }
+            });
+        },
+        onInput: function () {
+          var self = this;
+          if (this.timer) clearTimeout(this.timer);
+          this.timer = setTimeout(function () { self.fetch(self.q); }, 200);
+        },
+        move: function (delta) {
+          var count = this.items.length;
+          var next = (this.selected + delta + count) % count;
+          while (this.items[next].header) {
+            next = (next + delta + count) % count;
+          }
+          this.selected = next;
+        },
+        onKeydown: function (event) {
+          if (event.key === "ArrowDown") { event.preventDefault(); this.move(1); }
+          else if (event.key === "ArrowUp") { event.preventDefault(); this.move(-1); }
+          else if (event.key === "Enter") {
+            var item = this.items[this.selected];
+            if (item && !item.header) { event.preventDefault(); this.go(item); }
+          }
+        },
+      };
+    };
+  </script>`;
+
 export function themeToggle(): string {
   return `<button id="theme-toggle" type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2"
             aria-label="Change theme">
@@ -232,6 +372,15 @@ function hostLayout(options: LayoutOptions, dataScript: string): string {
         ${wordmark("/dashboard")}
       </div>
 
+      <div class="px-3 pt-3">
+        <button id="palette-trigger" type="button" class="ui-side-link w-full" @click="$dispatch('open-palette')"
+                aria-haspopup="dialog" aria-label="Search — Command K">
+          ${icon("search", "size-[18px] shrink-0")}
+          <span class="flex-1 text-left">Search</span>
+          <kbd class="rounded border border-line bg-subtle px-1.5 py-0.5 text-[0.6875rem] text-muted">⌘K</kbd>
+        </button>
+      </div>
+
       <nav class="flex-1 space-y-0.5 overflow-y-auto p-3" aria-label="Main">${links}</nav>
 
       <div class="shrink-0 space-y-3 border-t border-line p-3">
@@ -288,6 +437,38 @@ function hostLayout(options: LayoutOptions, dataScript: string): string {
         )}</span></div>`
       : ""
   }
+  ${PALETTE_SCRIPT}
+  <div x-data="meetflowPalette()" @open-palette.window="show()"
+       @keydown.meta.k.window.prevent="toggle()" @keydown.ctrl.k.window.prevent="toggle()"
+       @keydown.escape.window="if (open) close()">
+    <div x-show="open" x-cloak class="fixed inset-0 z-[60] bg-ink/40" @click="close()"></div>
+    <div x-show="open" x-cloak x-transition.duration.120ms role="dialog" aria-modal="true" aria-label="Search"
+         class="fixed inset-x-4 top-[10vh] z-[61] mx-auto max-w-xl" @click.outside="close()">
+      <div class="ui-card overflow-hidden p-0">
+        <input x-ref="input" x-model="q" @input="onInput()" @keydown="onKeydown($event)"
+               type="search" autocomplete="off" aria-label="Search"
+               placeholder="Search appointments, event types, attendees…"
+               class="w-full border-0 bg-transparent px-4 py-3 text-sm text-ink outline-none">
+        <div class="max-h-[60vh] overflow-y-auto border-t border-line py-1">
+          <template x-for="item in items" :key="item.key">
+            <div x-show="item.header"
+                 class="px-4 pt-2 pb-1 text-[0.6875rem] font-medium uppercase tracking-wide text-muted"
+                 x-text="item.label"></div>
+          </template>
+          <template x-for="(item, index) in items" :key="item.key">
+            <button x-show="!item.header" type="button" tabindex="-1" @click="go(item)" @mouseenter="selected = index"
+                    class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm"
+                    :class="selected === index ? 'bg-subtle' : ''">
+              <span class="min-w-0 flex-1 truncate text-ink" x-text="item.label"></span>
+              <span class="max-w-[14rem] shrink-0 truncate text-[0.75rem] text-muted" x-text="item.hint"></span>
+            </button>
+          </template>
+          <p x-show="!items.length && !loading && !failed" class="px-4 py-3 text-sm text-muted">No results.</p>
+          <p x-show="failed" class="px-4 py-3 text-sm text-muted">Search is unavailable right now.</p>
+        </div>
+      </div>
+    </div>
+  </div>
   ${dataScript}
   ${THEME_TOGGLE_SCRIPT}
   ${COPY_LINK_SCRIPT}

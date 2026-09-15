@@ -51,6 +51,8 @@ export const LIMITS = {
    * tokens can be tried even though forging one requires the secret.
    */
   guestCancel: { bucket: "guest-cancel", limit: 20, periodSeconds: 60 },
+  /** Keystroke-driven: 60/min per host is far above human typing, well below abuse. */
+  search: { bucket: "search", limit: 60, periodSeconds: 60 },
 } as const satisfies Record<string, { bucket: string; limit: number; periodSeconds: number }>;
 
 /** Bucket names the overrides map is allowed to mention. */

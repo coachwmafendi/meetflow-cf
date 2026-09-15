@@ -25,6 +25,7 @@ export default defineConfig({
             login: 1_000_000,
             register: 1_000_000,
             avatar: 1_000_000,
+            search: 1_000_000,
           }),
         },
         d1Databases: { DB: "meetflow-test" },
