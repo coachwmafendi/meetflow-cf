@@ -11,6 +11,10 @@ export default defineConfig({
       miniflare: {
         bindings: {
           SESSION_SECRET: "test-secret-do-not-use-in-prod",
+          APP_URL: "https://example.com",
+          GOOGLE_CLIENT_ID: "test-client-id",
+          GOOGLE_CLIENT_SECRET: "test-client-secret",
+          GOOGLE_TOKEN_KEY: btoa("0123456789abcdef0123456789abcdef"),
           TEST_MIGRATIONS: migrations,
           // The suite exercises each endpoint far above its production limit from a
           // single key, so lift every bucket. The real limits are exercised in

@@ -17,7 +17,20 @@ import { findUserById, findUserBySlug, setAvatarKey, updateUserSettings } from "
 import { listSavedLocations } from "../db/savedLocations";
 import { ImageError, avatarKey, validateAvatar } from "../lib/image";
 import { cancelPath, reschedulePath } from "../lib/cancelToken";
-import { fetchGoogleBusyClosure } from "../lib/googleCalendar";
+import {
+  emailFromIdToken,
+  exchangeGoogleCode,
+  fetchGoogleBusyClosure,
+  googleAuthUrl,
+  hasGoogleSecrets,
+  verifyOauthState,
+} from "../lib/googleCalendar";
+import { encryptToBase64 } from "../lib/encrypt";
+import {
+  deleteGoogleConnection,
+  getConnectedGoogleEmail,
+  upsertGoogleConnection,
+} from "../db/googleConnections";
 import { toMinutes } from "../lib/slots";
 import { isoUtc, nowIso } from "../lib/time";
 import { isValidTimeZone, zonedDateString, zonedToUtc } from "../lib/timezone";
@@ -42,6 +55,7 @@ import {
   eventTypeEditPage,
   eventTypesPage,
   settingsPage,
+  type CalendarSettings,
 } from "../views/dashboard";
 import {
   bookingPage,
@@ -73,6 +87,12 @@ const readToast = (c: Context<AppEnv>) => (c.req.query("toast") ?? "").slice(0, 
 
 const toastRedirect = (c: Context<AppEnv>, path: string, message?: string) =>
   c.redirect(`${path}${message ? `?toast=${encodeURIComponent(message)}` : ""}`, 302);
+
+/** Feature-off renders no card at all; on renders connect or connected. */
+async function calendarSettings(env: Cloudflare.Env, userId: number): Promise<CalendarSettings> {
+  if (!hasGoogleSecrets(env)) return { configured: false, googleEmail: null };
+  return { configured: true, googleEmail: await getConnectedGoogleEmail(env.DB, userId) };
+}
 
 pageRoutes.get("/", (c) => (c.get("user") ? c.redirect("/dashboard") : html(marketingPage())));
 
@@ -412,7 +432,10 @@ dashboard.post("/bookings/:id/cancel", async (c) => {
   return toastRedirect(c, "/dashboard/bookings", "Booking cancelled");
 });
 
-dashboard.get("/settings", (c) => html(settingsPage(c.get("user"), undefined, readToast(c))));
+dashboard.get("/settings", async (c) => {
+  const user = c.get("user");
+  return html(settingsPage(user, undefined, readToast(c), await calendarSettings(c.env, user.id)));
+});
 
 dashboard.post("/settings/avatar", rateLimit(LIMITS.avatar), async (c) => {
   const user = c.get("user");
@@ -434,7 +457,9 @@ dashboard.post("/settings/avatar", rateLimit(LIMITS.avatar), async (c) => {
       c.executionCtx.waitUntil(c.env.AVATARS.delete(user.avatar_key));
     }
   } catch (err) {
-    if (err instanceof ImageError) return html(settingsPage(user, err.message), 400);
+    if (err instanceof ImageError) {
+      return html(settingsPage(user, err.message, "", await calendarSettings(c.env, user.id)), 400);
+    }
     throw err;
   }
   return toastRedirect(c, "/dashboard/settings", "Profile photo updated");
@@ -458,6 +483,11 @@ dashboard.post("/settings", async (c) => {
     await updateUserSettings(c.env.DB, user.id, { name, timezone, now: nowIso() });
   }
   return toastRedirect(c, "/dashboard/settings", "Settings saved");
+});
+
+dashboard.post("/settings/calendar/disconnect", async (c) => {
+  await deleteGoogleConnection(c.env.DB, c.get("user").id);
+  return toastRedirect(c, "/dashboard/settings", "Google Calendar disconnected");
 });
 
 pageRoutes.route("/dashboard", dashboard);
@@ -597,6 +627,60 @@ pageRoutes.get("/booking/:id/confirmed", async (c) => {
       ? await reschedulePath(booking.id, c.env.SESSION_SECRET)
       : undefined;
   return html(confirmationPage(host, eventType, booking, href, reschedule));
+});
+
+pageRoutes.get("/oauth/google/authorize", async (c) => {
+  const user = c.get("user");
+  if (!user) return c.redirect("/login");
+  if (!hasGoogleSecrets(c.env)) {
+    return toastRedirect(c, "/dashboard/settings", "Google Calendar is not configured");
+  }
+  return c.redirect(await googleAuthUrl(c.env, user.id, c.env.SESSION_SECRET));
+});
+
+pageRoutes.get("/oauth/google/callback", async (c) => {
+  const user = c.get("user");
+  if (!user) return c.redirect("/login");
+  if (!hasGoogleSecrets(c.env)) {
+    return toastRedirect(c, "/dashboard/settings", "Google Calendar is not configured");
+  }
+  if (c.req.query("error")) {
+    return toastRedirect(c, "/dashboard/settings", "Google Calendar connection was cancelled");
+  }
+  const code = c.req.query("code");
+  const state = c.req.query("state") ?? "";
+  const stateUserId = await verifyOauthState(state, c.env.SESSION_SECRET);
+  if (!code || stateUserId !== user.id) {
+    return toastRedirect(
+      c,
+      "/dashboard/settings",
+      "Google Calendar connection could not be verified",
+    );
+  }
+
+  try {
+    const tokens = await exchangeGoogleCode(c.env, code);
+    if (!tokens.refresh_token) {
+      return toastRedirect(
+        c,
+        "/dashboard/settings",
+        "Google did not return a refresh token; reconnect",
+      );
+    }
+    await upsertGoogleConnection(c.env.DB, {
+      userId: user.id,
+      // "primary" still works as the freeBusy calendar id if the email is unreadable.
+      googleEmail: (tokens.id_token ? emailFromIdToken(tokens.id_token) : null) ?? "primary",
+      encRefresh: await encryptToBase64(c.env.GOOGLE_TOKEN_KEY!, tokens.refresh_token),
+      encAccess: await encryptToBase64(c.env.GOOGLE_TOKEN_KEY!, tokens.access_token),
+      accessExpiresAt: Date.now() + tokens.expires_in * 1000,
+      now: nowIso(),
+    });
+  } catch (err) {
+    console.error("google oauth: callback failed", err);
+    return toastRedirect(c, "/dashboard/settings", "Google Calendar connection failed");
+  }
+  return toastRedirect(c, "/dashboard/settings", "Google Calendar connected");
 });
 
 pageRoutes.get("/:username", async (c) => {

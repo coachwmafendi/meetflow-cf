@@ -908,7 +908,17 @@ export function bookingsPage(
 
 /* -------------------------------------------------------------------------- */
 
-export function settingsPage(user: PublicUser, error?: string, toast = ""): string {
+export interface CalendarSettings {
+  configured: boolean;
+  googleEmail: string | null;
+}
+
+export function settingsPage(
+  user: PublicUser,
+  error?: string,
+  toast = "",
+  calendar: CalendarSettings = { configured: false, googleEmail: null },
+): string {
   return layout({
     title: "Settings",
     nav: "host",
@@ -953,6 +963,34 @@ export function settingsPage(user: PublicUser, error?: string, toast = ""): stri
             }
           </div>
         </section>
+
+        ${
+          calendar.configured
+            ? `<section class="ui-card ui-card-pad">
+                <p class="ui-eyebrow mb-3">Calendar</p>
+                <div class="flex flex-wrap items-center gap-4">
+                  <div class="min-w-0 flex-1">
+                    ${
+                      calendar.googleEmail
+                        ? `<p class="text-sm font-medium text-ink">Connected as
+                             <span class="font-mono text-[0.8125rem]">${escapeHtml(calendar.googleEmail)}</span></p>
+                           <p class="ui-hint">Slots overlapping Google Calendar events are hidden from your booking page.</p>`
+                        : `<p class="ui-hint">Connect Google Calendar (read-only) to hide slots that overlap events already in your Google Calendar.</p>`
+                    }
+                  </div>
+                  ${
+                    calendar.googleEmail
+                      ? `<form method="post" action="/dashboard/settings/calendar/disconnect">
+                           ${button({ label: "Disconnect", variant: "ghost", size: "sm" })}
+                         </form>`
+                      : `<a class="ui-btn ui-btn-secondary ui-btn-sm" href="/oauth/google/authorize">
+                           ${icon("calendar", "size-4")}<span>Connect Google Calendar</span>
+                         </a>`
+                  }
+                </div>
+              </section>`
+            : ""
+        }
 
         <form class="ui-card ui-card-pad space-y-4" method="post" action="/dashboard/settings">
           ${field({ name: "name", label: "Name", value: user.name })}
