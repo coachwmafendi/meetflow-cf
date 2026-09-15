@@ -362,16 +362,47 @@
     @apply absolute;
   }
 
-  .auth-globe {
+  .auth-globe-wrap {
     @apply absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:block;
-    width: min(64vh, 40rem);
-    height: min(64vh, 40rem);
+    width: min(72vh, 44rem);
+    height: min(72vh, 44rem);
+  }
+
+  .auth-globe {
+    @apply absolute inset-0 h-full w-full;
     stroke: var(--color-line-strong);
     opacity: 0.8;
   }
 
   .auth-globe * {
     stroke-width: 0.35;
+  }
+
+  .auth-clock {
+    @apply absolute hidden select-none items-center gap-1.5 text-muted md:flex;
+    opacity: 0.8;
+    transform: translate(-3px, -50%);
+  }
+
+  .auth-clock--flip {
+    @apply flex-row-reverse;
+    transform: translate(calc(-100% + 3px), -50%);
+  }
+
+  .auth-clock-dot {
+    @apply size-1.5 shrink-0 rounded-full bg-accent;
+  }
+
+  .auth-clock-label {
+    @apply flex flex-col leading-tight;
+  }
+
+  .auth-clock-time {
+    @apply font-mono text-[0.8125rem] tabular-nums tracking-tight text-body;
+  }
+
+  .auth-clock-city {
+    @apply text-[0.6875rem] uppercase tracking-[0.14em];
   }
 
   .auth-bg-glow-a {
@@ -432,16 +463,9 @@
   }
 
   .auth-clock {
-    @apply absolute hidden select-none flex-col gap-0.5 text-muted md:flex;
-    opacity: 0.55;
-  }
-
-  .auth-clock-time {
-    @apply font-mono text-sm tabular-nums tracking-tight text-body;
-  }
-
-  .auth-clock-city {
-    @apply text-[0.6875rem] uppercase tracking-[0.14em];
+    @apply absolute hidden select-none items-center gap-1.5 text-muted md:flex;
+    opacity: 0.8;
+    transform: translate(-3px, -50%);
   }
 
   @media (prefers-reduced-motion: reduce) {

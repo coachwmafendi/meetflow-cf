@@ -22,13 +22,19 @@ function passwordField(options: { hint?: string; attrsHtml?: string } = {}): str
     </div>`;
 }
 
-const WORLD_CLOCKS: Array<{ tz: string; city: string; pos: string }> = [
-  { tz: "America/Los_Angeles", city: "San Francisco", pos: "top-[26%] left-[8%]" },
-  { tz: "America/New_York", city: "New York", pos: "top-[47%] left-[8%]" },
-  { tz: "Europe/London", city: "London", pos: "top-[68%] left-[8%]" },
-  { tz: "Asia/Tokyo", city: "Tokyo", pos: "top-[26%] right-[8%]" },
-  { tz: "Asia/Kuala_Lumpur", city: "Kuala Lumpur", pos: "top-[47%] right-[8%]" },
-  { tz: "Australia/Sydney", city: "Sydney", pos: "top-[68%] right-[8%]" },
+const WORLD_CLOCKS: Array<{
+  tz: string;
+  city: string;
+  x: number;
+  y: number;
+  flip?: boolean;
+}> = [
+  { tz: "America/Los_Angeles", city: "San Francisco", x: 15, y: 28 },
+  { tz: "America/New_York", city: "New York", x: 28, y: 23 },
+  { tz: "Europe/London", city: "London", x: 47, y: 16 },
+  { tz: "Asia/Tokyo", city: "Tokyo", x: 84, y: 26, flip: true },
+  { tz: "Asia/Kuala_Lumpur", city: "Kuala Lumpur", x: 74, y: 47, flip: true },
+  { tz: "Australia/Sydney", city: "Sydney", x: 81, y: 68, flip: true },
 ];
 
 const worldGlobe = `
@@ -43,9 +49,13 @@ const worldGlobe = `
   </svg>`;
 
 const worldClocks = WORLD_CLOCKS.map(
-  (c) => `<div class="auth-clock ${c.pos}" data-tz="${c.tz}">
-    <span class="auth-clock-time" data-clock-time>--:--</span>
-    <span class="auth-clock-city">${c.city}</span>
+  (c) => `<div class="auth-clock${c.flip ? " auth-clock--flip" : ""}"
+       data-tz="${c.tz}" style="left:${c.x}%;top:${c.y}%">
+    <span class="auth-clock-dot"></span>
+    <span class="auth-clock-label">
+      <span class="auth-clock-time" data-clock-time>--:--</span>
+      <span class="auth-clock-city">${c.city}</span>
+    </span>
   </div>`,
 ).join("");
 
@@ -91,8 +101,10 @@ function authShell(options: {
         <div class="auth-bg-glow auth-bg-glow-a"></div>
         <div class="auth-bg-glow auth-bg-glow-b"></div>
         <div class="auth-bg-glow auth-bg-glow-c"></div>
-        ${worldGlobe}
-        ${worldClocks}
+        <div class="auth-globe-wrap">
+          ${worldGlobe}
+          ${worldClocks}
+        </div>
       </div>
       <div class="relative z-10 mx-auto w-full max-w-[22rem] py-6 sm:py-10">
         <a href="/" class="mb-8 flex items-center justify-center gap-2 text-ink" aria-label="MeetFlow">
