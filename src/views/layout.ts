@@ -42,6 +42,37 @@ const THEME_BOOTSTRAP = `<script>
 </script>`;
 
 /** Cycles light → dark → follow-the-OS. Hosts only; guests follow their OS. */
+/**
+ * When this page runs inside the MeetFlow popup iframe (embed.js), reports the
+ * bottom of its real content to the host page so the popup can shrink to fit
+ * instead of showing empty space below. The body itself always fills the
+ * iframe (min-h-full), so the measurement walks main's children. Inert
+ * outside an iframe.
+ */
+const FRAME_HEIGHT_SCRIPT = `
+  <script>
+    (function () {
+      if (window.parent === window) return;
+      var post = function () {
+        var height = document.documentElement.scrollHeight;
+        var main = document.querySelector("main");
+        if (main) {
+          var bottom = 0;
+          for (var i = 0; i < main.children.length; i++) {
+            var rect = main.children[i].getBoundingClientRect();
+            if (rect.bottom > bottom) bottom = rect.bottom;
+          }
+          bottom += parseFloat(getComputedStyle(main).paddingBottom) || 0;
+          if (bottom > 0) height = bottom;
+        }
+        window.parent.postMessage({ source: "meetflow-embed", type: "resize", height: Math.ceil(height) }, "*");
+      };
+      if ("ResizeObserver" in window) new ResizeObserver(post).observe(document.documentElement);
+      window.addEventListener("load", post);
+      post();
+    })();
+  </script>`;
+
 const THEME_TOGGLE_SCRIPT = `<script>
   (function () {
     var btn = document.getElementById("theme-toggle");
@@ -260,6 +291,7 @@ function hostLayout(options: LayoutOptions, dataScript: string): string {
   ${dataScript}
   ${THEME_TOGGLE_SCRIPT}
   ${COPY_LINK_SCRIPT}
+  ${FRAME_HEIGHT_SCRIPT}
 </body>
 </html>`;
 }
@@ -300,6 +332,7 @@ export function layout(options: LayoutOptions): string {
   }">${options.body}</main>
   ${dataScript}
   ${THEME_TOGGLE_SCRIPT}
+  ${FRAME_HEIGHT_SCRIPT}
 </body>
 </html>`;
 }

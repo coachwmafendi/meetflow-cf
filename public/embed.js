@@ -18,6 +18,32 @@
 
   var ORIGIN = origin();
 
+  /**
+   * The framed booking page reports its content height (FRAME_HEIGHT_SCRIPT in
+   * layout.ts); the panel shrinks to fit so short pages don't leave a blank
+   * strip at the bottom. Falls back to the initial CSS height until a report
+   * arrives, so the popup still works if the page is cached or blocked.
+   */
+  var panelEl = null;
+  var contentHeight = 0;
+  var MIN_PANEL_HEIGHT = 320;
+
+  function applyHeight() {
+    if (!panelEl) return;
+    var maxHeight = Math.round(window.innerHeight * 0.9);
+    var height = Math.max(MIN_PANEL_HEIGHT, Math.min(contentHeight, maxHeight));
+    panelEl.style.height = height + "px";
+  }
+
+  window.addEventListener("message", function (event) {
+    if (event.origin !== ORIGIN) return;
+    var data = event.data;
+    if (!data || data.source !== "meetflow-embed" || data.type !== "resize") return;
+    contentHeight = Number(data.height) || 0;
+    applyHeight();
+  });
+  window.addEventListener("resize", applyHeight);
+
   function close(overlay) {
     overlay.style.display = "none";
   }
@@ -37,6 +63,7 @@
       var panel = document.createElement("div");
       panel.style.cssText =
         "position:relative;width:100%;max-width:1024px;height:min(90vh,800px);background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.35);";
+      panelEl = panel;
 
       var closeBtn = document.createElement("button");
       closeBtn.type = "button";
