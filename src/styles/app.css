@@ -345,6 +345,99 @@
     @apply translate-x-4;
   }
 
+  /* --- Auth ambient ------------------------------------------------------- */
+  .auth-bg {
+    @apply pointer-events-none fixed inset-0 z-0 overflow-hidden;
+  }
+
+  .auth-bg-grid {
+    @apply absolute inset-0;
+    background-image: radial-gradient(circle, var(--color-line-strong) 1px, transparent 1px);
+    background-size: 26px 26px;
+    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 42%, black 30%, transparent 78%);
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 42%, black 30%, transparent 78%);
+  }
+
+  .auth-bg-glow {
+    @apply absolute;
+  }
+
+  .auth-bg-glow-a {
+    top: -14%;
+    left: -10%;
+    width: 42rem;
+    height: 42rem;
+    background: radial-gradient(
+      circle at center,
+      color-mix(in oklab, var(--color-accent) 16%, transparent),
+      transparent 65%
+    );
+    animation: auth-drift-a 26s ease-in-out infinite alternate;
+  }
+
+  .auth-bg-glow-b {
+    bottom: -18%;
+    right: -12%;
+    width: 46rem;
+    height: 46rem;
+    background: radial-gradient(
+      circle at center,
+      color-mix(in oklab, var(--color-success) 13%, transparent),
+      transparent 65%
+    );
+    animation: auth-drift-b 32s ease-in-out infinite alternate;
+  }
+
+  .auth-bg-glow-c {
+    top: 32%;
+    right: 16%;
+    width: 26rem;
+    height: 26rem;
+    background: radial-gradient(
+      circle at center,
+      color-mix(in oklab, var(--color-warning) 10%, transparent),
+      transparent 65%
+    );
+    animation: auth-drift-a 40s ease-in-out infinite alternate-reverse;
+  }
+
+  @keyframes auth-drift-a {
+    from {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    to {
+      transform: translate3d(4rem, 3rem, 0) scale(1.08);
+    }
+  }
+
+  @keyframes auth-drift-b {
+    from {
+      transform: translate3d(0, 0, 0) scale(1.05);
+    }
+    to {
+      transform: translate3d(-4rem, -2rem, 0) scale(1);
+    }
+  }
+
+  .auth-clock {
+    @apply absolute hidden select-none flex-col gap-0.5 text-muted md:flex;
+    opacity: 0.55;
+  }
+
+  .auth-clock-time {
+    @apply font-mono text-sm tabular-nums tracking-tight text-body;
+  }
+
+  .auth-clock-city {
+    @apply text-[0.6875rem] uppercase tracking-[0.14em];
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .auth-bg-glow {
+      animation: none;
+    }
+  }
+
   /* --- Data ------------------------------------------------------------- */
   .ui-table {
     @apply w-full border-collapse text-left text-sm;

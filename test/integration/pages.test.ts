@@ -12,6 +12,9 @@ describe("pages", () => {
     const html = await res.text();
     expect(html).toContain("Sign in");
     expect(html).toContain("Show password");
+    expect(html).toContain('data-tz="Asia/Kuala_Lumpur"');
+    expect(html).toContain("Kuala Lumpur");
+    expect(html).toContain("auth-bg-glow");
   });
 
   it("serves the marketing page to anonymous visitors", async () => {
@@ -143,6 +146,9 @@ describe("pages", () => {
     expect(html).toContain("ui-embed-tab");
     expect(html).toContain("data-meetflow-link");
     expect(html).toContain("/embed.js");
+    // The embedded script must keep the </script> escape intact, otherwise the
+    // inline script terminates early and the dashboard JS dies on the page.
+    expect(html).toContain('<\\/script>');
   });
 
   it("renders the search box wired to the event type cards", async () => {

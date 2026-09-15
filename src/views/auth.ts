@@ -22,6 +22,45 @@ function passwordField(options: { hint?: string; attrsHtml?: string } = {}): str
     </div>`;
 }
 
+const WORLD_CLOCKS: Array<{ tz: string; city: string; pos: string }> = [
+  { tz: "Asia/Kuala_Lumpur", city: "Kuala Lumpur", pos: "top-[16%] left-[8%]" },
+  { tz: "Europe/London", city: "London", pos: "top-[26%] right-[9%]" },
+  { tz: "America/New_York", city: "New York", pos: "top-[52%] left-[11%]" },
+  { tz: "Asia/Tokyo", city: "Tokyo", pos: "bottom-[26%] right-[13%]" },
+  { tz: "Australia/Sydney", city: "Sydney", pos: "bottom-[14%] left-[15%]" },
+  { tz: "America/Los_Angeles", city: "San Francisco", pos: "top-[68%] right-[6%]" },
+];
+
+const worldClocks = WORLD_CLOCKS.map(
+  (c) => `<div class="auth-clock ${c.pos}" data-tz="${c.tz}">
+    <span class="auth-clock-time" data-clock-time>--:--</span>
+    <span class="auth-clock-city">${c.city}</span>
+  </div>`,
+).join("");
+
+const WORLD_CLOCK_SCRIPT = `
+  <script>
+    (function () {
+      var clocks = document.querySelectorAll("[data-tz]");
+      if (!clocks.length) return;
+      function render() {
+        var now = new Date();
+        clocks.forEach(function (el) {
+          try {
+            el.querySelector("[data-clock-time]").textContent = new Intl.DateTimeFormat("en-GB", {
+              timeZone: el.getAttribute("data-tz"),
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+            }).format(now);
+          } catch (e) { /* unknown zone — leave placeholder */ }
+        });
+      }
+      render();
+      setInterval(render, 15000);
+    })();
+  </script>`;
+
 function authShell(options: {
   title: string;
   heading: string;
@@ -36,7 +75,14 @@ function authShell(options: {
     nav: "none",
     width: "sm",
     body: `
-      <div class="mx-auto w-full max-w-[22rem] py-6 sm:py-10">
+      <div class="auth-bg" aria-hidden="true">
+        <div class="auth-bg-grid"></div>
+        <div class="auth-bg-glow auth-bg-glow-a"></div>
+        <div class="auth-bg-glow auth-bg-glow-b"></div>
+        <div class="auth-bg-glow auth-bg-glow-c"></div>
+        ${worldClocks}
+      </div>
+      <div class="relative z-10 mx-auto w-full max-w-[22rem] py-6 sm:py-10">
         <a href="/" class="mb-8 flex items-center justify-center gap-2 text-ink" aria-label="MeetFlow">
           <span class="flex size-7 items-center justify-center rounded-lg bg-primary text-on-primary">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" class="size-4">
@@ -63,7 +109,8 @@ function authShell(options: {
           <p class="mt-5 text-center text-[0.8125rem] text-muted">${options.footerHtml}</p>
         </div>
       </div>
-      ${options.scriptHtml ?? ""}`,
+      ${options.scriptHtml ?? ""}
+      ${WORLD_CLOCK_SCRIPT}`,
   });
 }
 
