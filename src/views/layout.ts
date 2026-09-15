@@ -264,11 +264,11 @@ const PALETTE_SCRIPT = `
           this.timer = setTimeout(function () { self.fetch(self.q); }, 200);
         },
         move: function (delta) {
-          var next = this.selected;
-          do {
-            next += delta;
-            if (next < 0 || next >= this.items.length) return;
-          } while (this.items[next].header);
+          var count = this.items.length;
+          var next = (this.selected + delta + count) % count;
+          while (this.items[next].header) {
+            next = (next + delta + count) % count;
+          }
           this.selected = next;
         },
         onKeydown: function (event) {
