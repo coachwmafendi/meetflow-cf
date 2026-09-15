@@ -130,7 +130,7 @@ export async function updateEventType(
     .prepare(
       `UPDATE event_types
        SET name = ?, slug = ?, description = ?, duration_minutes = ?, buffer_minutes = ?,
-           location_type = ?, location_value = ?, is_active = ?, updated_at = ?
+           seats_total = ?, location_type = ?, location_value = ?, is_active = ?, updated_at = ?
        WHERE id = ? AND user_id = ?
        RETURNING *`,
     )
