@@ -3,7 +3,7 @@ import { utcToZonedParts } from "../lib/timezone";
 import { zoneDisplay } from "../lib/timezoneList";
 import { avatar, badge, button, emptyState, icon } from "./ui";
 import { TIMEZONE_SCRIPT } from "./timezoneSelect";
-import type { BookingRow, EventTypeRow, PublicUser } from "../types";
+import type { BookingAttendeeRow, BookingRow, EventTypeRow, PublicUser } from "../types";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -127,6 +127,7 @@ export function bookingPage(
     eventSlug: eventType.slug,
     eventName: eventType.name,
     durationMinutes: eventType.duration_minutes,
+    seatsTotal: eventType.seats_total,
     reschedule: reschedule ?? null,
   };
 
@@ -310,8 +311,11 @@ export function bookingPage(
                 <div class="max-h-[19rem] space-y-2 overflow-y-auto pr-1"
                      x-show="!loading && slots.length">
                   <template x-for="slot in slots" :key="slot.startAt">
-                    <button type="button" class="ui-slot w-full" @click="choose(slot)"
-                            x-text="label(slot.startAt)"></button>
+                    <button type="button" class="ui-slot w-full flex-col gap-0.5" @click="choose(slot)">
+                      <span x-text="label(slot.startAt)"></span>
+                      <span class="font-sans text-[0.6875rem] font-normal normal-case text-muted"
+                            x-show="seatsTotal > 1" x-text="seatLabel(slot)"></span>
+                    </button>
                   </template>
                 </div>
 
@@ -536,6 +540,14 @@ export function bookingPage(
               });
             },
 
+            seatLabel(slot) {
+              if (this.seatsTotal <= 1) return '';
+              var left = slot.seatsLeft === undefined ? this.seatsTotal : slot.seatsLeft;
+              return left === this.seatsTotal
+                ? this.seatsTotal + ' seats'
+                : left === 1 ? '1 seat left' : left + ' seats left';
+            },
+
             choose(slot) {
               this.selected = slot;
               this.error = '';
@@ -566,7 +578,8 @@ export function bookingPage(
               this.submitting = false;
               if (res.status === 201) {
                 var created = await res.json();
-                window.location.href = '/booking/' + created.booking.id + '/confirmed';
+                window.location.href = '/booking/' + created.booking.id + '/confirmed' +
+                  (created.attendee ? '?attendee=' + created.attendee.id : '');
                 return;
               }
               var body = await res.json().catch(function () { return {}; });
@@ -621,6 +634,93 @@ export function cancelConfirmPage(
               label: "Keep it",
               href: `/${escapeHtml(host.slug)}`,
               variant: "ghost",
+            })}
+          </div>
+        </div>
+      </div>`,
+  });
+}
+
+/** Confirm release of one seat on a group slot. Cancelling is a POST from here. */
+export function cancelSeatConfirmPage(
+  host: PublicUser,
+  eventType: EventTypeRow,
+  booking: BookingRow,
+  attendee: BookingAttendeeRow,
+  token: string,
+): string {
+  const when = formatBookingWhen(booking);
+
+  return layout({
+    title: "Cancel seat",
+    nav: "none",
+    width: "md",
+    body: `
+      <div class="mx-auto max-w-md ui-rise">
+        <div class="ui-card ui-card-pad">
+          <h1 class="text-lg font-semibold tracking-[-0.02em] text-ink">Cancel your seat?</h1>
+          <p class="mt-1.5 text-[0.8125rem] text-muted">
+            You give up your place at this group event. The other guests keep theirs. It cannot be
+            undone — you would need to book again while seats remain.
+          </p>
+
+          <dl class="ui-divide mt-5 border-t border-line">
+            ${detailRow("Event", escapeHtml(eventType.name))}
+            ${detailRow("Host", escapeHtml(host.name))}
+            ${detailRow("Guest", `${escapeHtml(attendee.guest_name)} · ${escapeHtml(attendee.guest_email)}`)}
+            ${detailRow("When", `<span class="ui-time">${escapeHtml(when.date)}</span>`)}
+            ${detailRow("Time", `<span class="ui-time font-medium">${escapeHtml(when.time)}</span>`)}
+            ${detailRow("Timezone", escapeHtml(when.zone))}
+          </dl>
+
+          <div class="mt-6 flex flex-wrap items-center gap-2">
+            <form method="post" action="/booking/${booking.id}/attendee/${attendee.id}/cancel">
+              <input type="hidden" name="token" value="${escapeHtml(token)}">
+              ${button({ label: "Cancel my seat", variant: "danger" })}
+            </form>
+            ${button({
+              label: "Keep it",
+              href: `/${escapeHtml(host.slug)}`,
+              variant: "ghost",
+            })}
+          </div>
+        </div>
+      </div>`,
+  });
+}
+
+/** Terminal page after a guest releases a seat on a group slot. */
+export function seatCancelledPage(
+  host: PublicUser,
+  eventType: EventTypeRow,
+  seatsLeft: number,
+): string {
+  return layout({
+    title: "Seat cancelled",
+    nav: "none",
+    width: "md",
+    body: `
+      <div class="mx-auto max-w-md ui-rise text-center">
+        <div class="ui-card ui-card-pad">
+          <span class="mx-auto flex size-11 items-center justify-center rounded-full bg-subtle text-muted">
+            ${icon("x", "size-5")}
+          </span>
+          <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">Seat cancelled</h1>
+          <p class="mt-1.5 text-[0.8125rem] text-muted">
+            Your seat at ${escapeHtml(eventType.name)} with ${escapeHtml(host.name)} has been released.
+            ${
+              seatsLeft > 0
+                ? "The other guests keep their places."
+                : "That was the last seat, so the time slot is free again."
+            }
+            ${escapeHtml(host.name)} has been notified.
+          </p>
+          <div class="mt-6">
+            ${button({
+              label: `Book another time with ${host.name}`,
+              href: `/${escapeHtml(host.slug)}`,
+              variant: "secondary",
+              size: "sm",
             })}
           </div>
         </div>
@@ -702,6 +802,8 @@ export function confirmationPage(
   booking: BookingRow,
   cancelHref?: string,
   rescheduleHref?: string,
+  /** Group events only: the viewing guest's seat, when known. */
+  seat?: { guestEmail?: string; seatsTaken: number; cancelHref?: string },
 ): string {
   const p = utcToZonedParts(new Date(booking.start_at), booking.timezone);
   const end = utcToZonedParts(new Date(booking.end_at), booking.timezone);
@@ -739,6 +841,11 @@ export function confirmationPage(
             ${row("Timezone", escapeHtml(zoneDisplay(booking.timezone)))}
             ${row("Duration", `<span class="ui-time">${eventType.duration_minutes} min</span>`)}
             ${
+              eventType.seats_total > 1 && seat
+                ? row("Seats", `${seat.seatsTaken} of ${eventType.seats_total} taken`)
+                : ""
+            }
+            ${
               eventType.location_type !== "none" && eventType.location_value
                 ? row("Location", locationLine(eventType))
                 : ""
@@ -748,7 +855,13 @@ export function confirmationPage(
 
           <div class="border-t border-line bg-subtle/60 px-5 py-4 sm:px-6">
             <p class="text-[0.8125rem] text-muted">
-              A confirmation has been sent to ${escapeHtml(booking.guest_email)}.
+              ${
+                seat
+                  ? seat.guestEmail
+                    ? `A confirmation has been sent to ${escapeHtml(seat.guestEmail)}.`
+                    : "Open the link in your confirmation email to manage your seat."
+                  : `A confirmation has been sent to ${escapeHtml(booking.guest_email)}.`
+              }
             </p>
           </div>
         </div>
@@ -761,7 +874,7 @@ export function confirmationPage(
             size: "sm",
           })}
           ${
-            rescheduleHref
+            rescheduleHref && eventType.seats_total === 1
               ? button({
                   label: "Reschedule",
                   href: rescheduleHref,
@@ -771,9 +884,11 @@ export function confirmationPage(
               : ""
           }
           ${
-            cancelHref
-              ? button({ label: "Cancel appointment", href: cancelHref, variant: "ghost", size: "sm" })
-              : ""
+            seat?.cancelHref
+              ? button({ label: "Cancel my seat", href: seat.cancelHref, variant: "ghost", size: "sm" })
+              : cancelHref && eventType.seats_total === 1
+                ? button({ label: "Cancel appointment", href: cancelHref, variant: "ghost", size: "sm" })
+                : ""
           }
         </div>
       </div>`,

@@ -92,6 +92,13 @@ describe("hostNotification", () => {
     expect(mail.html).not.toContain("Reschedule");
     expect(mail.text).not.toContain("Reschedule");
   });
+
+  it("shows the seat headcount for group events", () => {
+    const mail = hostNotification({ ...ctx, seatsTaken: 3, seatsTotal: 10 }, "UTC");
+    expect(mail.subject).toBe("New appointment: Ahmad — Consultation (3/10 seats)");
+    expect(mail.text).toContain("3 of 10 seats taken");
+    expect(mail.text).toContain("Seats: 3 of 10");
+  });
 });
 
 describe("guestCancellation and guestReminder", () => {

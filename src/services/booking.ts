@@ -4,17 +4,31 @@ import {
   cancelBookingById,
   getBookingById,
   getBookingOwned,
+  getConfirmedSlotBooking,
   insertBookingIfFree,
   rescheduleBookingIfFree,
 } from "../db/bookings";
+import {
+  cancelAllAttendees,
+  cancelAttendee,
+  countConfirmedAttendees,
+  getAttendeeForBooking,
+  insertAttendee,
+  joinBookingIfSeatsFree,
+  listAttendees,
+} from "../db/attendees";
 import { findUserById, findUserBySlug } from "../db/users";
 import { addMinutes, isoUtc, nowIso, parseIsoUtc } from "../lib/time";
 import { isValidTimeZone, zonedDateString, zonedToUtc } from "../lib/timezone";
 import type { FetchGoogleBusy } from "../lib/googleCalendar";
 import { isEmail, isYmd } from "../lib/validate";
-import { verifyCancelToken } from "../lib/cancelToken";
+import {
+  signCancelToken,
+  verifyAttendeeToken,
+  verifyCancelToken,
+} from "../lib/cancelToken";
 import { getDaySlots } from "./availability";
-import type { BookingRow, EventTypeRow, PublicUser } from "../types";
+import type { BookingAttendeeRow, BookingRow, EventTypeRow, PublicUser } from "../types";
 
 export class BookingError extends Error {
   constructor(
@@ -59,10 +73,16 @@ export interface CreateBookingInput {
   fetchGoogleBusy?: FetchGoogleBusy;
 }
 
+export interface CreatedBooking {
+  booking: BookingRow;
+  /** Set for group events: the seat this guest now holds. */
+  attendee: BookingAttendeeRow | null;
+}
+
 export async function createBooking(
   db: D1Database,
   input: CreateBookingInput,
-): Promise<BookingRow> {
+): Promise<CreatedBooking> {
   const { host, eventType } = await resolvePublicTarget(db, input.hostSlug, input.eventSlug);
 
   const guestName = input.guestName.trim();
@@ -109,6 +129,7 @@ export async function createBooking(
     eventTypeId: eventType.id,
     durationMinutes: eventType.duration_minutes,
     bufferMinutes: eventType.buffer_minutes,
+    seatsTotal: eventType.seats_total,
     dateYmd: hostDate,
     nowMs,
     extraBusy,
@@ -119,7 +140,56 @@ export async function createBooking(
   }
   // A real slot, but someone already took it.
   if (!free.some((s) => s.startAt === startIso)) {
+    if (eventType.seats_total > 1) {
+      const full = await getConfirmedSlotBooking(db, host.id, eventType.id, startIso);
+      if (full) throw new BookingError("This event is fully booked.", 409);
+    }
     throw new BookingError("This time slot is no longer available.", 409);
+  }
+
+  const attendeeInput = {
+    bookingId: 0,
+    guestName,
+    guestEmail,
+    notes: input.notes,
+    timezone: input.guestTimezone,
+    now: nowIso(),
+  };
+
+  if (eventType.seats_total > 1) {
+    // Group slot: try to create it; if we lost that race the slot exists and we
+    // join it instead — so two simultaneous first guests both get a seat.
+    const fresh = await insertBookingIfFree(db, {
+      userId: host.id,
+      eventTypeId: eventType.id,
+      guestName,
+      guestEmail,
+      startAt: startIso,
+      endAt: endIso,
+      timezone: input.guestTimezone,
+      notes: input.notes,
+      bufferMinutes: eventType.buffer_minutes,
+      now: nowIso(),
+    });
+    if (fresh) {
+      const attendee = await insertAttendee(db, { ...attendeeInput, bookingId: fresh.id });
+      if (!attendee) {
+        // Never leave a slot booked without its first guest.
+        await cancelBookingById(db, fresh.id, nowIso());
+        throw new BookingError("This time slot is no longer available.", 409);
+      }
+      return { booking: fresh, attendee };
+    }
+
+    const existing = await getConfirmedSlotBooking(db, host.id, eventType.id, startIso);
+    if (!existing) throw new BookingError("This time slot is no longer available.", 409);
+    const attendees = await listAttendees(db, existing.id);
+    if (attendees.some((a) => a.status === "confirmed" && a.guest_email === guestEmail)) {
+      throw new BookingError("You have already booked this appointment.", 409);
+    }
+    const attendee = await joinBookingIfSeatsFree(db, { ...attendeeInput, bookingId: existing.id });
+    if (!attendee) throw new BookingError("This event is fully booked.", 409);
+    return { booking: existing, attendee };
   }
 
   const booking = await insertBookingIfFree(db, {
@@ -135,7 +205,7 @@ export async function createBooking(
     now: nowIso(),
   });
   if (!booking) throw new BookingError("This time slot is no longer available.", 409);
-  return booking;
+  return { booking, attendee: null };
 }
 
 export interface RescheduleInput {
@@ -206,6 +276,7 @@ export async function rescheduleBooking(
     eventTypeId: eventType.id,
     durationMinutes: eventType.duration_minutes,
     bufferMinutes: eventType.buffer_minutes,
+    seatsTotal: eventType.seats_total,
     dateYmd: hostDate,
     nowMs,
     extraBusy,
@@ -306,5 +377,79 @@ export async function cancelOwnedBooking(
 
   const cancelled = await cancelBooking(db, bookingId, userId, nowIso());
   if (!cancelled) throw new BookingError("Not found", 404);
+  await cancelAllAttendees(db, bookingId, nowIso());
   return cancelled;
+}
+
+export interface SeatResolution {
+  booking: BookingRow;
+  attendee: BookingAttendeeRow;
+  eventType: EventTypeRow;
+  host: PublicUser;
+}
+
+/**
+ * Verifies a seat token and loads everything the seat pages need. The token
+ * authorises exactly one attendee row; the id in the path must match it.
+ */
+export async function resolveSeatToken(
+  db: D1Database,
+  bookingId: number,
+  attendeeId: number,
+  token: string,
+  secret: string,
+): Promise<SeatResolution> {
+  const payloadId = await verifyAttendeeToken(token, secret);
+  if (payloadId === null || payloadId !== attendeeId) {
+    throw new BookingError("This cancellation link is not valid.", 404);
+  }
+  const attendee = await getAttendeeForBooking(db, attendeeId, bookingId);
+  if (!attendee) throw new BookingError("This cancellation link is not valid.", 404);
+  const booking = await getBookingById(db, bookingId);
+  if (!booking) throw new BookingError("Not found", 404);
+  const host = await findUserById(db, booking.user_id);
+  const eventType = await getEventTypeById(db, booking.event_type_id);
+  if (!host || !eventType) throw new BookingError("Not found", 404);
+  return { booking, attendee, eventType, host };
+}
+
+export interface CancelledSeat {
+  booking: BookingRow;
+  attendee: BookingAttendeeRow;
+  /** Confirmed seats remaining after this cancellation. */
+  seatsLeft: number;
+}
+
+/**
+ * A guest releases one seat of a group slot. When the last seat goes, the slot
+ * itself is released so the time becomes fully bookable again.
+ */
+export async function cancelAttendeeSeat(
+  db: D1Database,
+  bookingId: number,
+  attendeeId: number,
+  token: string,
+  secret: string,
+  nowMs?: number,
+): Promise<CancelledSeat> {
+  const { attendee, booking } = await resolveSeatToken(db, bookingId, attendeeId, token, secret);
+
+  if (booking.status !== "confirmed") {
+    throw new BookingError("This appointment has already been cancelled.", 409);
+  }
+  const now = nowMs ?? Date.now();
+  if (Date.parse(booking.end_at) <= now) {
+    throw new BookingError("This meeting has already taken place.", 409);
+  }
+  if (attendee.status !== "confirmed") {
+    throw new BookingError("This seat was already cancelled.", 409);
+  }
+
+  const cancelled = await cancelAttendee(db, attendee.id, nowIso());
+  if (!cancelled) throw new BookingError("This seat was already cancelled.", 409);
+
+  const seatsLeft = await countConfirmedAttendees(db, booking.id);
+  if (seatsLeft === 0) await cancelBookingById(db, booking.id, nowIso());
+
+  return { booking, attendee, seatsLeft };
 }

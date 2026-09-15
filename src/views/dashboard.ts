@@ -955,6 +955,11 @@ export function bookingsPage(
     `<div class="font-medium text-ink">${escapeHtml(b.guest_name)}</div>
      <div class="text-[0.8125rem] text-muted">${escapeHtml(b.guest_email)}</div>
      ${
+       b.seats_total > 1
+         ? `<p class="mt-1 text-[0.75rem] text-muted">Group — ${b.seats_taken} of ${b.seats_total} seats taken</p>`
+         : ""
+     }
+     ${
        b.notes
          ? `<p class="mt-1.5 max-w-sm border-l-2 border-line pl-2.5 text-[0.8125rem] text-muted">${escapeHtml(
              b.notes,
@@ -965,7 +970,11 @@ export function bookingsPage(
     whenCell(b.start_at, user.timezone),
     statusBadge(b.status),
     b.status === "confirmed"
-      ? `<form method="post" action="/dashboard/bookings/${b.id}/cancel">
+      ? `<form method="post" action="/dashboard/bookings/${b.id}/cancel"${
+          b.seats_total > 1
+            ? ` onsubmit="return confirm('Cancel this group event? All ${b.seats_taken} guests lose their seat.')"`
+            : ""
+        }>
            ${button({ label: "Cancel", variant: "danger", size: "sm" })}
          </form>`
       : "",

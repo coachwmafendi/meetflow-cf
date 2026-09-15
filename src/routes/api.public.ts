@@ -7,7 +7,7 @@ import { fetchGoogleBusyClosure, getGoogleBusy } from "../lib/googleCalendar";
 import { LIMITS, rateLimit } from "../middleware/rateLimit";
 import { getMonthFreeDays, getSlotsForDate } from "../services/availability";
 import { BookingError, createBooking, resolvePublicTarget } from "../services/booking";
-import { queueBookingCreated } from "../services/email";
+import { queueAttendeeJoined, queueBookingCreated } from "../services/email";
 import type { AppEnv } from "../types";
 
 export const publicRoutes = new Hono<AppEnv>();
@@ -59,6 +59,7 @@ publicRoutes.get("/:username/:eventSlug/slots", async (c) => {
       eventTypeId: eventType.id,
       durationMinutes: eventType.duration_minutes,
       bufferMinutes: eventType.buffer_minutes,
+      seatsTotal: eventType.seats_total,
       dateYmd: date,
       nowMs: Date.now(),
       extraBusy,
@@ -104,6 +105,7 @@ publicRoutes.get("/:username/:eventSlug/month", async (c) => {
       eventTypeId: eventType.id,
       durationMinutes: eventType.duration_minutes,
       bufferMinutes: eventType.buffer_minutes,
+      seatsTotal: eventType.seats_total,
       year,
       month,
       nowMs: Date.now(),
@@ -121,7 +123,7 @@ publicRoutes.post("/:username/:eventSlug/book", rateLimit(LIMITS.book), async (c
     .json<Record<string, unknown>>()
     .catch(() => ({}) as Record<string, unknown>);
   try {
-    const booking = await createBooking(c.env.DB, {
+    const result = await createBooking(c.env.DB, {
       hostSlug: c.req.param("username"),
       eventSlug: c.req.param("eventSlug"),
       startAt: String(body.start_at ?? ""),
@@ -132,8 +134,20 @@ publicRoutes.post("/:username/:eventSlug/book", rateLimit(LIMITS.book), async (c
       fetchGoogleBusy: fetchGoogleBusyClosure(c.env.DB, c.env),
     });
     // Off the critical path: the guest gets their confirmation page regardless.
-    c.executionCtx.waitUntil(queueBookingCreated(c.env, booking.id));
-    return c.json({ booking }, 201);
+    if (result.attendee) {
+      c.executionCtx.waitUntil(
+        queueAttendeeJoined(c.env, result.booking.id, result.attendee.id),
+      );
+    } else {
+      c.executionCtx.waitUntil(queueBookingCreated(c.env, result.booking.id));
+    }
+    return c.json(
+      {
+        booking: result.booking,
+        ...(result.attendee ? { attendee: result.attendee } : {}),
+      },
+      201,
+    );
   } catch (err) {
     if (err instanceof BookingError) return c.json({ error: err.message }, err.status);
     throw err;

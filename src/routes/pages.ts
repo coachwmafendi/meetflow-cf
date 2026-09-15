@@ -16,7 +16,11 @@ import {
 import { findUserById, findUserBySlug, setAvatarKey, updateUserSettings } from "../db/users";
 import { listSavedLocations } from "../db/savedLocations";
 import { ImageError, avatarKey, validateAvatar } from "../lib/image";
-import { cancelPath, reschedulePath } from "../lib/cancelToken";
+import {
+  attendeeCancelPath,
+  cancelPath,
+  reschedulePath,
+} from "../lib/cancelToken";
 import {
   emailFromIdToken,
   exchangeGoogleCode,
@@ -40,12 +44,22 @@ import { LIMITS, rateLimit } from "../middleware/rateLimit";
 import { AuthError, login, register } from "../services/auth";
 import {
   BookingError,
+  cancelAttendeeSeat,
   cancelBookingByToken,
   cancelOwnedBooking,
   rescheduleBooking,
   resolveCancelToken,
+  resolveSeatToken,
 } from "../services/booking";
-import { queueBookingCancelled, queueBookingCreated } from "../services/email";
+import {
+  countConfirmedAttendees,
+  getAttendeeForBooking,
+} from "../db/attendees";
+import {
+  queueAttendeeCancelled,
+  queueBookingCancelled,
+  queueBookingCreated,
+} from "../services/email";
 import { loginPage, registerPage } from "../views/auth";
 import { privacyPage, termsPage } from "../views/legal";
 import { marketingPage } from "../views/marketing";
@@ -61,10 +75,12 @@ import {
 import {
   bookingPage,
   cancelConfirmPage,
+  cancelSeatConfirmPage,
   cancelUnavailablePage,
   cancelledPage,
   confirmationPage,
   profilePage,
+  seatCancelledPage,
 } from "../views/publicBooking";
 import type { AppEnv, EventTypeRow } from "../types";
 
@@ -586,6 +602,16 @@ pageRoutes.post("/booking/:id/cancel", rateLimit(LIMITS.guestCancel), async (c) 
       token,
       c.env.SESSION_SECRET,
     );
+    if (eventType.seats_total > 1) {
+      // A booking-level token on a group slot would cancel everyone's seat.
+      // Guests manage their own place via the link in their confirmation email.
+      return html(
+        cancelUnavailablePage(
+          "This is a group event. Use the link in your confirmation email to cancel your own seat.",
+        ),
+        409,
+      );
+    }
     // The guest already knows; the host is the one who needs telling.
     c.executionCtx.waitUntil(queueBookingCancelled(c.env, booking.id, "guest"));
     return html(cancelledPage(host, eventType));
@@ -604,6 +630,14 @@ pageRoutes.get("/booking/:id/reschedule", rateLimit(LIMITS.guestCancel), async (
       token,
       c.env.SESSION_SECRET,
     );
+    if (eventType.seats_total > 1) {
+      return html(
+        cancelUnavailablePage(
+          "Group events cannot be rescheduled. Cancel your seat and book another time instead.",
+        ),
+        409,
+      );
+    }
     if (booking.status !== "confirmed") {
       return html(cancelUnavailablePage("This booking can no longer be rescheduled."), 409);
     }
@@ -650,6 +684,26 @@ pageRoutes.get("/booking/:id/confirmed", async (c) => {
   const host = await findUserById(c.env.DB, booking.user_id);
   const eventType = await getEventTypeById(c.env.DB, booking.event_type_id);
   if (!host || !eventType) return notFound();
+
+  if (eventType.seats_total > 1) {
+    // Group events are managed per seat, never with booking-level links.
+    const attendeeParam = Number(c.req.query("attendee"));
+    let seat: { guestEmail?: string; seatsTaken: number; cancelHref?: string } | undefined;
+    const seatsTaken = await countConfirmedAttendees(c.env.DB, booking.id);
+    if (Number.isInteger(attendeeParam) && attendeeParam > 0) {
+      const attendee = await getAttendeeForBooking(c.env.DB, attendeeParam, booking.id);
+      if (attendee && attendee.status === "confirmed") {
+        seat = {
+          guestEmail: attendee.guest_email,
+          seatsTaken,
+          cancelHref: await attendeeCancelPath(booking.id, attendeeParam, c.env.SESSION_SECRET),
+        };
+      }
+    }
+    if (!seat) seat = { seatsTaken };
+    return html(confirmationPage(host, eventType, booking, undefined, undefined, seat));
+  }
+
   const href =
     booking.status === "confirmed" ? await cancelPath(booking.id, c.env.SESSION_SECRET) : undefined;
   const reschedule =
@@ -658,6 +712,60 @@ pageRoutes.get("/booking/:id/confirmed", async (c) => {
       : undefined;
   return html(confirmationPage(host, eventType, booking, href, reschedule));
 });
+
+/** Seat pages: same flow as guest cancel, scoped to one attendee of a group slot. */
+pageRoutes.get("/booking/:id/attendee/:attendeeId/cancel", rateLimit(LIMITS.guestCancel), async (c) => {
+  const token = c.req.query("token") ?? "";
+  try {
+    const { booking, attendee, eventType, host } = await resolveSeatToken(
+      c.env.DB,
+      Number(c.req.param("id")),
+      Number(c.req.param("attendeeId")),
+      token,
+      c.env.SESSION_SECRET,
+    );
+    if (booking.status === "cancelled" || attendee.status !== "confirmed") {
+      return html(seatCancelledPage(host, eventType, await countConfirmedAttendees(c.env.DB, booking.id)));
+    }
+    if (Date.parse(booking.end_at) <= Date.now()) {
+      return html(cancelUnavailablePage("This meeting has already taken place."), 409);
+    }
+    return html(cancelSeatConfirmPage(host, eventType, booking, attendee, token));
+  } catch (err) {
+    if (err instanceof BookingError) return html(cancelUnavailablePage(err.message), err.status);
+    throw err;
+  }
+});
+
+pageRoutes.post(
+  "/booking/:id/attendee/:attendeeId/cancel",
+  rateLimit(LIMITS.guestCancel),
+  async (c) => {
+    const form = await c.req.parseBody();
+    const token = String(form.token ?? "");
+    try {
+      const { attendee } = await cancelAttendeeSeat(
+        c.env.DB,
+        Number(c.req.param("id")),
+        Number(c.req.param("attendeeId")),
+        token,
+        c.env.SESSION_SECRET,
+      );
+      // The guest did this themselves; the host is the one who needs telling.
+      c.executionCtx.waitUntil(queueAttendeeCancelled(c.env, attendee.booking_id, attendee.id));
+      const booking = await getBookingById(c.env.DB, attendee.booking_id);
+      const host = booking ? await findUserById(c.env.DB, booking.user_id) : null;
+      const eventType = booking ? await getEventTypeById(c.env.DB, booking.event_type_id) : null;
+      if (!booking || !host || !eventType) return notFound();
+      return html(
+        seatCancelledPage(host, eventType, await countConfirmedAttendees(c.env.DB, booking.id)),
+      );
+    } catch (err) {
+      if (err instanceof BookingError) return html(cancelUnavailablePage(err.message), err.status);
+      throw err;
+    }
+  },
+);
 
 pageRoutes.get("/oauth/google/authorize", async (c) => {
   const user = c.get("user");

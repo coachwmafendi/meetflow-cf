@@ -46,6 +46,9 @@ export interface BookingEmailContext {
   cancelUrl?: string;
   /** Signed guest reschedule link. Absent for host-facing mail. */
   rescheduleUrl?: string;
+  /** Group events only: confirmed seats and capacity, for host-facing copy. */
+  seatsTaken?: number;
+  seatsTotal?: number;
 }
 
 /** "Monday, 14 September 2026 · 09:00–09:30 · Kuala Lumpur (GMT+8)" */
@@ -174,10 +177,19 @@ export function guestConfirmation(ctx: BookingEmailContext, guestTimeZone: strin
 
 /** Sent to the host when someone books them. */
 export function hostNotification(ctx: BookingEmailContext, hostTimeZone: string): EmailMessage {
+  const group =
+    ctx.seatsTotal !== undefined && ctx.seatsTotal > 1 && ctx.seatsTaken !== undefined;
   const { html, text } = render({
     heading: "New appointment",
-    intro: `${ctx.guestName} booked ${ctx.eventName}.`,
-    rows: [...baseRows(ctx, hostTimeZone), ["Guest", ctx.guestName], ["Email", ctx.guestEmail]],
+    intro: group
+      ? `${ctx.guestName} joined ${ctx.eventName} (${ctx.seatsTaken} of ${ctx.seatsTotal} seats taken).`
+      : `${ctx.guestName} booked ${ctx.eventName}.`,
+    rows: [
+      ...baseRows(ctx, hostTimeZone),
+      ["Guest", ctx.guestName],
+      ["Email", ctx.guestEmail],
+      ...(group ? [["Seats", `${ctx.seatsTaken} of ${ctx.seatsTotal}`] as [string, string]] : []),
+    ],
     note: ctx.notes ? `Guest note: ${ctx.notes}` : null,
     cta: { label: "Open dashboard", href: `${ctx.appUrl}/dashboard/bookings` },
     footer: "You are receiving this because someone booked your MeetFlow page.",
@@ -185,7 +197,9 @@ export function hostNotification(ctx: BookingEmailContext, hostTimeZone: string)
 
   return {
     to: ctx.hostEmail,
-    subject: `New appointment: ${ctx.guestName} — ${ctx.eventName}`,
+    subject: group
+      ? `New appointment: ${ctx.guestName} — ${ctx.eventName} (${ctx.seatsTaken}/${ctx.seatsTotal} seats)`
+      : `New appointment: ${ctx.guestName} — ${ctx.eventName}`,
     html,
     text,
     replyTo: ctx.guestEmail,

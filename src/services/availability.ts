@@ -2,7 +2,6 @@ import { listRules, listRulesForDay } from "../db/availability";
 import { listConfirmedBetween, type BusyInterval } from "../db/bookings";
 import {
   generateSlotStarts,
-  removeBusy,
   removePast,
   toHhmm,
   toMinutes,
@@ -19,16 +18,60 @@ import { dayOfWeek, zonedDateString, zonedToUtc } from "../lib/timezone";
  * later meeting's leading buffer — so the grid never shows a slot the guard
  * would reject.
  */
+interface TrackedInterval extends Interval {
+  /** The bookings row behind the interval; 0 = external source (Google busy). */
+  bookingId: number;
+}
+
 function busyIntervals(
   rows: BusyInterval[],
   eventTypeId: number,
   bufferMinutes: number,
-): Interval[] {
+): TrackedInterval[] {
   return rows.map((b) => ({
+    bookingId: b.id,
     startMs:
       Date.parse(b.start_at) - (b.event_type_id === eventTypeId ? bufferMinutes * 60_000 : 0),
     endMs: Date.parse(b.end_at) + (b.event_type_id === eventTypeId ? bufferMinutes * 60_000 : 0),
   }));
+}
+
+/**
+ * Slots a guest may still take. Beyond the classic "no overlap" rule, a group
+ * slot (seats_total > 1) whose own booking still has seats left stays
+ * bookable — joining it — as long as no OTHER busy interval touches it.
+ */
+function bookableSlots(
+  upcoming: Interval[],
+  busyRows: BusyInterval[],
+  busy: TrackedInterval[],
+  eventTypeId: number,
+  seatsTotal: number,
+): Array<Interval & { seatsLeft: number }> {
+  const result: Array<Interval & { seatsLeft: number }> = [];
+  for (const slot of upcoming) {
+    const overlapping = busy.filter((b) => b.startMs < slot.endMs && b.endMs > slot.startMs);
+    if (overlapping.length === 0) {
+      result.push({ ...slot, seatsLeft: seatsTotal });
+      continue;
+    }
+    if (seatsTotal > 1) {
+      const first = overlapping[0]!;
+      if (overlapping.every((b) => b.bookingId === first.bookingId)) {
+        const row = busyRows.find((r) => r.id === first.bookingId);
+        if (
+          row &&
+          row.event_type_id === eventTypeId &&
+          row.start_at === isoUtc(new Date(slot.startMs)) &&
+          row.seats_taken < seatsTotal
+        ) {
+          result.push({ ...slot, seatsLeft: seatsTotal - row.seats_taken });
+          continue;
+        }
+      }
+    }
+  }
+  return result;
 }
 
 export interface SlotQuery {
@@ -37,6 +80,8 @@ export interface SlotQuery {
   eventTypeId: number;
   durationMinutes: number;
   bufferMinutes: number;
+  /** Guests per slot for this event type (1 = private). */
+  seatsTotal?: number;
   dateYmd: string;
   nowMs: number;
   /** Google Calendar busy intervals supplied by the caller (feature off = absent). */
@@ -49,6 +94,8 @@ export interface MonthQuery {
   eventTypeId: number;
   durationMinutes: number;
   bufferMinutes: number;
+  /** Guests per slot for this event type (1 = private). */
+  seatsTotal?: number;
   /** 1-12 */
   month: number;
   year: number;
@@ -61,6 +108,8 @@ export interface Slot {
   /** UTC instant, fixed-width ISO. */
   startAt: string;
   endAt: string;
+  /** Present on group events: seats still open on this slot. */
+  seatsLeft?: number;
 }
 
 export interface DaySlots {
@@ -108,17 +157,23 @@ export async function getDaySlots(db: D1Database, q: SlotQuery): Promise<DaySlot
     isoUtc(new Date(dayStart)),
     isoUtc(new Date(dayEnd)),
   );
-  const busy = [...busyIntervals(busyRows, q.eventTypeId, q.bufferMinutes), ...(q.extraBusy ?? [])];
+  const busy = [
+    ...busyIntervals(busyRows, q.eventTypeId, q.bufferMinutes),
+    ...(q.extraBusy ?? []).map((b) => ({ ...b, bookingId: 0 })),
+  ];
 
-  const toSlot = (slot: Interval): Slot => ({
+  const toSlot = (slot: Interval & { seatsLeft?: number }): Slot => ({
     startAt: isoUtc(new Date(slot.startMs)),
     endAt: isoUtc(addMinutes(new Date(slot.startMs), q.durationMinutes)),
+    ...(slot.seatsLeft !== undefined && q.seatsTotal !== undefined && q.seatsTotal > 1
+      ? { seatsLeft: slot.seatsLeft }
+      : {}),
   });
 
   const upcoming = removePast(candidates, q.nowMs);
   return {
     grid: upcoming.map(toSlot),
-    free: removeBusy(upcoming, busy).map(toSlot),
+    free: bookableSlots(upcoming, busyRows, busy, q.eventTypeId, q.seatsTotal ?? 1).map(toSlot),
   };
 }
 
@@ -170,12 +225,22 @@ export async function getMonthFreeDays(db: D1Database, q: MonthQuery): Promise<s
     isoUtc(new Date(minMs)),
     isoUtc(new Date(maxMs)),
   );
-  const busy = [...busyIntervals(busyRows, q.eventTypeId, q.bufferMinutes), ...(q.extraBusy ?? [])];
+  const busy = [
+    ...busyIntervals(busyRows, q.eventTypeId, q.bufferMinutes),
+    ...(q.extraBusy ?? []).map((b) => ({ ...b, bookingId: 0 })),
+  ];
 
   const freeDays: string[] = [];
   for (const [ymd, slots] of byDate) {
     if (ymd < todayYmd) continue;
-    if (removeBusy(removePast(slots, q.nowMs), busy).length > 0) freeDays.push(ymd);
+    const bookable = bookableSlots(
+      removePast(slots, q.nowMs),
+      busyRows,
+      busy,
+      q.eventTypeId,
+      q.seatsTotal ?? 1,
+    );
+    if (bookable.length > 0) freeDays.push(ymd);
   }
   return freeDays;
 }

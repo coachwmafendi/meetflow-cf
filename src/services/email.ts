@@ -9,7 +9,12 @@ import {
   hostNotification,
   type BookingEmailContext,
 } from "../lib/emailTemplates";
-import { cancelUrl, rescheduleUrl } from "../lib/cancelToken";
+import {
+  attendeeCancelUrl,
+  cancelUrl,
+  rescheduleUrl,
+} from "../lib/cancelToken";
+import { countConfirmedAttendees, getAttendeeById } from "../db/attendees";
 import { sendEmail, type SendOutcome } from "../lib/resend";
 import { nowIso } from "../lib/time";
 import type { Env } from "../types";
@@ -22,8 +27,10 @@ import type { Env } from "../types";
  */
 export type EmailJob =
   | { kind: "booking_confirmed"; bookingId: number; to: "guest" | "host" }
+  | { kind: "attendee_confirmed"; bookingId: number; to: "guest" | "host"; attendeeId: number }
+  | { kind: "attendee_cancelled"; bookingId: number; to: "host"; attendeeId: number }
   | { kind: "booking_cancelled"; bookingId: number; to: "guest" | "host" }
-  | { kind: "booking_reminder"; bookingId: number; to: "guest" };
+  | { kind: "booking_reminder"; bookingId: number; to: "guest"; attendeeId?: number };
 
 /**
  * Queues the emails for a new booking. Never throws: a mail problem must not
@@ -33,6 +40,29 @@ export async function queueBookingCreated(env: Env, bookingId: number): Promise<
   await enqueue(env, [
     { kind: "booking_confirmed", bookingId, to: "guest" },
     { kind: "booking_confirmed", bookingId, to: "host" },
+  ]);
+}
+
+/** A guest released their seat: only the host needs telling. */
+export async function queueAttendeeCancelled(
+  env: Env,
+  bookingId: number,
+  attendeeId: number,
+): Promise<void> {
+  await enqueue(env, [
+    { kind: "attendee_cancelled", bookingId, to: "host", attendeeId },
+  ]);
+}
+
+/** A guest took a seat on a group slot: their confirmation + host headcount. */
+export async function queueAttendeeJoined(
+  env: Env,
+  bookingId: number,
+  attendeeId: number,
+): Promise<void> {
+  await enqueue(env, [
+    { kind: "attendee_confirmed", bookingId, to: "guest", attendeeId },
+    { kind: "attendee_confirmed", bookingId, to: "host", attendeeId },
   ]);
 }
 
@@ -77,10 +107,28 @@ async function loadContext(
   ]);
   if (!host || !eventType) return null;
 
+  // Group slots: the job may address one seat rather than the first guest.
+  const isGroup = eventType.seats_total > 1;
+  let guestName = booking.guest_name;
+  let guestEmail = booking.guest_email;
+  let guestNotes = booking.notes;
+  let guestTimezone = booking.timezone;
+  if ("attendeeId" in job && job.attendeeId) {
+    const attendee = await getAttendeeById(env.DB, job.attendeeId);
+    if (!attendee) return null;
+    if (job.kind === "attendee_confirmed" && attendee.status !== "confirmed") return null;
+    guestName = attendee.guest_name;
+    guestEmail = attendee.guest_email;
+    guestNotes = attendee.notes;
+    guestTimezone = attendee.timezone;
+  }
+
+  const seatsTaken = isGroup ? await countConfirmedAttendees(env.DB, booking.id) : undefined;
+
   return {
     ctx: {
-      guestName: booking.guest_name,
-      guestEmail: booking.guest_email,
+      guestName,
+      guestEmail,
       hostName: host.name,
       hostEmail: host.email,
       hostSlug: host.slug,
@@ -88,20 +136,23 @@ async function loadContext(
       durationMinutes: eventType.duration_minutes,
       startAt: booking.start_at,
       endAt: booking.end_at,
-      notes: booking.notes,
+      notes: guestNotes,
       appUrl: env.APP_URL,
+      ...(isGroup ? { seatsTaken, seatsTotal: eventType.seats_total } : {}),
       // Only guest-facing mail carries the link; the host cancels from the dashboard.
       cancelUrl:
         job.to === "guest" && job.kind !== "booking_cancelled"
-          ? await cancelUrl(env.APP_URL, booking.id, env.SESSION_SECRET)
+          ? "attendeeId" in job && job.attendeeId
+            ? await attendeeCancelUrl(env.APP_URL, booking.id, job.attendeeId, env.SESSION_SECRET)
+            : await cancelUrl(env.APP_URL, booking.id, env.SESSION_SECRET)
           : undefined,
-      // Reschedule is only offered in the confirmation; reminders keep just the cancel link.
+      // Reschedule is only offered in the confirmation of private appointments.
       rescheduleUrl:
-        job.to === "guest" && job.kind === "booking_confirmed"
+        job.to === "guest" && job.kind === "booking_confirmed" && !isGroup
           ? await rescheduleUrl(env.APP_URL, booking.id, env.SESSION_SECRET)
           : undefined,
     },
-    guestTimeZone: booking.timezone,
+    guestTimeZone: guestTimezone,
     hostTimeZone: host.timezone,
   };
 }
@@ -119,7 +170,7 @@ export async function processEmailJob(
   const { ctx, guestTimeZone, hostTimeZone } = loaded;
 
   const message =
-    job.kind === "booking_confirmed"
+    job.kind === "booking_confirmed" || job.kind === "attendee_confirmed"
       ? job.to === "host"
         ? hostNotification(ctx, hostTimeZone)
         : guestConfirmation(ctx, guestTimeZone)
@@ -127,7 +178,9 @@ export async function processEmailJob(
         ? job.to === "host"
           ? hostCancellation(ctx, hostTimeZone)
           : guestCancellation(ctx, guestTimeZone)
-        : guestReminder(ctx, guestTimeZone);
+        : job.kind === "attendee_cancelled"
+          ? hostCancellation(ctx, hostTimeZone)
+          : guestReminder(ctx, guestTimeZone);
 
   return sendEmail({ apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM }, message, fetchImpl);
 }
@@ -191,10 +244,23 @@ export async function queueDueReminders(env: Env, now: Date = new Date()): Promi
 
   if (results.length === 0) return 0;
 
-  await enqueue(
-    env,
-    results.map((row) => ({ kind: "booking_reminder", bookingId: row.id, to: "guest" }) as const),
-  );
+  // Group slots remind every confirmed guest, not just the first one.
+  const jobs: EmailJob[] = [];
+  for (const row of results) {
+    const { results: attendees } = await env.DB.prepare(
+      `SELECT id FROM booking_attendees WHERE booking_id = ? AND status = 'confirmed'`,
+    )
+      .bind(row.id)
+      .all<{ id: number }>();
+    if (attendees.length > 0) {
+      for (const a of attendees) {
+        jobs.push({ kind: "booking_reminder", bookingId: row.id, to: "guest", attendeeId: a.id });
+      }
+    } else {
+      jobs.push({ kind: "booking_reminder", bookingId: row.id, to: "guest" });
+    }
+  }
+  await enqueue(env, jobs);
   return results.length;
 }
 

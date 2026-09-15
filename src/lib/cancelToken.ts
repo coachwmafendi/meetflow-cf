@@ -61,3 +61,44 @@ export async function rescheduleUrl(
 ): Promise<string> {
   return `${appUrl}${await reschedulePath(bookingId, secret)}`;
 }
+
+/**
+ * Seat-level links for group events. A seat token names exactly one attendee
+ * row under its own purpose, so cancelling "my seat" can never touch the other
+ * guests sharing the slot.
+ */
+const ATTENDEE_PURPOSE = "attendee-cancel";
+
+export async function signAttendeeToken(attendeeId: number, secret: string): Promise<string> {
+  return signPayload(ATTENDEE_PURPOSE, String(attendeeId), secret);
+}
+
+/** Returns the attendee id the token authorises, or null. */
+export async function verifyAttendeeToken(
+  token: string,
+  secret: string,
+): Promise<number | null> {
+  const payload = await verifyPayload(ATTENDEE_PURPOSE, token, secret);
+  if (payload === null) return null;
+  const attendeeId = Number(payload);
+  if (!Number.isInteger(attendeeId) || attendeeId <= 0) return null;
+  return attendeeId;
+}
+
+export async function attendeeCancelPath(
+  bookingId: number,
+  attendeeId: number,
+  secret: string,
+): Promise<string> {
+  const token = await signAttendeeToken(attendeeId, secret);
+  return `/booking/${bookingId}/attendee/${attendeeId}/cancel?token=${encodeURIComponent(token)}`;
+}
+
+export async function attendeeCancelUrl(
+  appUrl: string,
+  bookingId: number,
+  attendeeId: number,
+  secret: string,
+): Promise<string> {
+  return `${appUrl}${await attendeeCancelPath(bookingId, attendeeId, secret)}`;
+}

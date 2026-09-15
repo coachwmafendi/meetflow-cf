@@ -1,10 +1,13 @@
 import { addMinutes, isoUtc } from "../lib/time";
-import type { BookingRow } from "../types";
+import type { BookingAttendeeRow, BookingRow } from "../types";
 
 export interface BusyInterval {
+  id: number;
   start_at: string;
   end_at: string;
   event_type_id: number;
+  /** Confirmed attendees on this slot (0 for private appointments). */
+  seats_taken: number;
 }
 
 export async function listConfirmedBetween(
@@ -15,19 +18,21 @@ export async function listConfirmedBetween(
 ): Promise<BusyInterval[]> {
   const { results } = await db
     .prepare(
-      `SELECT start_at, end_at, event_type_id FROM bookings
-       WHERE user_id = ?
-         AND status = 'confirmed'
-         AND start_at < ?
-         AND end_at > ?`,
+      `SELECT b.id, b.start_at, b.end_at, b.event_type_id,
+              (SELECT COUNT(*) FROM booking_attendees a
+               WHERE a.booking_id = b.id AND a.status = 'confirmed') AS seats_taken
+       FROM bookings b
+       WHERE b.user_id = ?
+         AND b.status = 'confirmed'
+         AND b.start_at < ?
+         AND b.end_at > ?`,
     )
     .bind(userId, toIso, fromIso)
     .all<BusyInterval>();
   return results;
 }
 
-export interface InsertBookingInput {
-  userId: number;
+export interface InsertBookingInput {  userId: number;
   eventTypeId: number;
   guestName: string;
   guestEmail: string;
@@ -222,6 +227,23 @@ export async function getBookingById(db: D1Database, id: number): Promise<Bookin
   return db.prepare("SELECT * FROM bookings WHERE id = ?").bind(id).first<BookingRow>();
 }
 
+/** The confirmed booking holding a given slot, when one exists. */
+export async function getConfirmedSlotBooking(
+  db: D1Database,
+  userId: number,
+  eventTypeId: number,
+  startAt: string,
+): Promise<BookingRow | null> {
+  return db
+    .prepare(
+      `SELECT * FROM bookings
+       WHERE user_id = ? AND event_type_id = ? AND start_at = ? AND status = 'confirmed'
+       LIMIT 1`,
+    )
+    .bind(userId, eventTypeId, startAt)
+    .first<BookingRow>();
+}
+
 export async function cancelBooking(
   db: D1Database,
   id: number,
@@ -259,6 +281,8 @@ export async function cancelBookingById(
 
 export interface BookingWithEvent extends BookingRow {
   event_name: string;
+  seats_total: number;
+  seats_taken: number;
 }
 
 export async function listBookings(
@@ -276,7 +300,9 @@ export async function listBookings(
   const order = scope === "upcoming" ? "ASC" : "DESC";
 
   const stmt = db.prepare(
-    `SELECT b.*, e.name AS event_name
+    `SELECT b.*, e.name AS event_name, e.seats_total,
+            (SELECT COUNT(*) FROM booking_attendees a
+             WHERE a.booking_id = b.id AND a.status = 'confirmed') AS seats_taken
      FROM bookings b
      JOIN event_types e ON e.id = b.event_type_id
      WHERE b.user_id = ? AND ${where}

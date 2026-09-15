@@ -292,6 +292,7 @@ describe("google busy (service level)", () => {
       notes: null,
       fetchGoogleBusy: async () => [],
     });
-    expect(booking.status).toBe("confirmed");
+    expect(booking.booking.status).toBe("confirmed");
+    expect(booking.attendee).toBeNull();
   });
 });
