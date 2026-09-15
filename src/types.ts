@@ -66,6 +66,18 @@ export interface BookingRow {
   updated_at: string;
 }
 
+export interface GoogleConnectionRow {
+  user_id: number;
+  google_email: string;
+  /** AES-GCM base64 blobs, encrypted with the GOOGLE_TOKEN_KEY secret. */
+  enc_refresh: string;
+  enc_access: string;
+  /** Epoch ms when the stored access token stops working. */
+  access_expires_at: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Variables {
   user: PublicUser;
 }

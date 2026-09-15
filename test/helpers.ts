@@ -2,6 +2,7 @@ import { SELF, env } from "cloudflare:test";
 
 export async function resetDb(): Promise<void> {
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM google_connections"),
     env.DB.prepare("DELETE FROM bookings"),
     env.DB.prepare("DELETE FROM availability_rules"),
     env.DB.prepare("DELETE FROM event_types"),
