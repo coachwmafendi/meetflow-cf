@@ -148,7 +148,7 @@ describe("pages", () => {
     expect(html).toContain("/embed.js");
     // The embedded script must keep the </script> escape intact, otherwise the
     // inline script terminates early and the dashboard JS dies on the page.
-    expect(html).toContain('<\\/script>');
+    expect(html).toContain("<\\/script>");
   });
 
   it("renders the search box wired to the event type cards", async () => {

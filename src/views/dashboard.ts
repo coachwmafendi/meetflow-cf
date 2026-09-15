@@ -45,7 +45,7 @@ const EMBED_SCRIPT = `
           "  js.src = u; js.async = true;",
           "  d.getElementsByTagName(s)[0].parentNode.insertBefore(js, d.getElementsByTagName(s)[0]);",
           '})(document, "script", "' + scriptUrl + '");',
-          "<\/script>",
+          "<\\/script>",
           "<!-- MeetFlow element-click embed code ends -->",
           "",
           "<!-- Add data-meetflow-link to any element; clicking it opens the popup. -->",
