@@ -1,4 +1,6 @@
+import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
+import { getSlotsForDate } from "../../src/services/availability";
 import { api, createHost, resetDb } from "../helpers";
 
 const rules = [
@@ -80,5 +82,69 @@ describe("availability", () => {
     });
     const res = await api("/api/availability", { cookie: ali.cookie });
     expect(await res.json()).toEqual({ rules: [] });
+  });
+});
+
+describe("extraBusy", () => {
+  beforeEach(resetDb);
+
+  it("removes slots that overlap Google busy intervals", async () => {
+    const host = await createHost("wan");
+    await api("/api/availability", {
+      method: "PUT",
+      cookie: host.cookie,
+      body: JSON.stringify({ rules: [{ day_of_week: 1, start_time: "09:00", end_time: "17:00" }] }),
+    });
+    const create = await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 60 }),
+    });
+    const { eventType } = await create.json<{ eventType: { id: number } }>();
+
+    // 2026-09-21 is a Monday. 13:00-15:00 host-local is free by availability.
+    const slots = await getSlotsForDate(env.DB, {
+      hostId: host.id,
+      hostTimezone: "Asia/Kuala_Lumpur",
+      eventTypeId: eventType.id,
+      durationMinutes: 60,
+      bufferMinutes: 0,
+      dateYmd: "2026-09-21",
+      nowMs: Date.parse("2026-09-15T00:00:00Z"),
+      extraBusy: [
+        {
+          startMs: Date.parse("2026-09-21T05:00:00Z"),
+          endMs: Date.parse("2026-09-21T07:00:00Z"),
+        },
+      ],
+    });
+    expect(slots.some((s) => s.startAt === "2026-09-21T05:00:00Z")).toBe(false);
+    expect(slots.some((s) => s.startAt === "2026-09-21T03:00:00Z")).toBe(true);
+  });
+
+  it("leaves slots untouched when extraBusy is empty", async () => {
+    const host = await createHost("wan");
+    await api("/api/availability", {
+      method: "PUT",
+      cookie: host.cookie,
+      body: JSON.stringify({ rules: [{ day_of_week: 1, start_time: "09:00", end_time: "17:00" }] }),
+    });
+    const create = await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 60 }),
+    });
+    const { eventType } = await create.json<{ eventType: { id: number } }>();
+    const slots = await getSlotsForDate(env.DB, {
+      hostId: host.id,
+      hostTimezone: "Asia/Kuala_Lumpur",
+      eventTypeId: eventType.id,
+      durationMinutes: 60,
+      bufferMinutes: 0,
+      dateYmd: "2026-09-21",
+      nowMs: Date.parse("2026-09-15T00:00:00Z"),
+      extraBusy: [],
+    });
+    expect(slots.some((s) => s.startAt === "2026-09-21T05:00:00Z")).toBe(true);
   });
 });

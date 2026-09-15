@@ -39,6 +39,8 @@ export interface SlotQuery {
   bufferMinutes: number;
   dateYmd: string;
   nowMs: number;
+  /** Google Calendar busy intervals supplied by the caller (feature off = absent). */
+  extraBusy?: Interval[];
 }
 
 export interface MonthQuery {
@@ -51,6 +53,8 @@ export interface MonthQuery {
   month: number;
   year: number;
   nowMs: number;
+  /** Google Calendar busy intervals supplied by the caller (feature off = absent). */
+  extraBusy?: Interval[];
 }
 
 export interface Slot {
@@ -104,7 +108,7 @@ export async function getDaySlots(db: D1Database, q: SlotQuery): Promise<DaySlot
     isoUtc(new Date(dayStart)),
     isoUtc(new Date(dayEnd)),
   );
-  const busy = busyIntervals(busyRows, q.eventTypeId, q.bufferMinutes);
+  const busy = [...busyIntervals(busyRows, q.eventTypeId, q.bufferMinutes), ...(q.extraBusy ?? [])];
 
   const toSlot = (slot: Interval): Slot => ({
     startAt: isoUtc(new Date(slot.startMs)),
@@ -166,7 +170,7 @@ export async function getMonthFreeDays(db: D1Database, q: MonthQuery): Promise<s
     isoUtc(new Date(minMs)),
     isoUtc(new Date(maxMs)),
   );
-  const busy = busyIntervals(busyRows, q.eventTypeId, q.bufferMinutes);
+  const busy = [...busyIntervals(busyRows, q.eventTypeId, q.bufferMinutes), ...(q.extraBusy ?? [])];
 
   const freeDays: string[] = [];
   for (const [ymd, slots] of byDate) {
