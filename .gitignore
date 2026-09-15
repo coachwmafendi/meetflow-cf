@@ -3,3 +3,4 @@ node_modules/
 public/app.css
 .dev.vars
 .DS_Store
+.worktrees/
