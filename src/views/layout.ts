@@ -157,7 +157,7 @@ const PALETTE_SCRIPT = `
         q: "",
         loading: false,
         failed: false,
-        selected: 0,
+        selected: 1,
         bookings: [],
         eventTypes: [],
         attendees: [],
@@ -203,7 +203,7 @@ const PALETTE_SCRIPT = `
             group("Attendees");
             for (var m = 0; m < this.attendees.length; m++) {
               var a = this.attendees[m];
-              items.push({ key: "a" + a.booking_id + "-" + a.guest_email, label: a.guest_name, hint: a.guest_email, href: "/dashboard/bookings" });
+              items.push({ key: "a" + a.id, label: a.guest_name, hint: a.guest_email, href: "/dashboard/bookings" });
             }
           }
           return items;
@@ -213,7 +213,7 @@ const PALETTE_SCRIPT = `
         show: function () {
           this.open = true;
           this.q = "";
-          this.selected = 0;
+          this.selected = 1;
           this.bookings = [];
           this.eventTypes = [];
           this.attendees = [];
@@ -223,8 +223,12 @@ const PALETTE_SCRIPT = `
           this.fetch("");
         },
         close: function () {
+          if (!this.open) return;
           this.open = false;
+          if (this.timer) clearTimeout(this.timer);
           if (this.controller) this.controller.abort();
+          var t = document.getElementById("palette-trigger");
+          if (t) t.focus();
         },
         go: function (item) {
           this.close();
@@ -233,20 +237,22 @@ const PALETTE_SCRIPT = `
         fetch: function (query) {
           var self = this;
           if (this.controller) this.controller.abort();
-          this.controller = new AbortController();
+          var controller = new AbortController();
+          this.controller = controller;
           this.loading = true;
           this.failed = false;
-          fetch("/api/search?q=" + encodeURIComponent(query), { signal: this.controller.signal })
+          fetch("/api/search?q=" + encodeURIComponent(query), { signal: controller.signal })
             .then(function (res) { if (!res.ok) throw new Error(res.status); return res.json(); })
             .then(function (data) {
               self.bookings = data.bookings || [];
               self.eventTypes = data.eventTypes || [];
               self.attendees = data.attendees || [];
-              self.selected = 0;
+              self.selected = 1;
               self.loading = false;
+              self.failed = false;
             })
             .catch(function () {
-              if (!self.controller.signal.aborted) {
+              if (!controller.signal.aborted) {
                 self.loading = false;
                 self.failed = true;
               }
@@ -367,8 +373,8 @@ function hostLayout(options: LayoutOptions, dataScript: string): string {
       </div>
 
       <div class="px-3 pt-3">
-        <button type="button" class="ui-side-link w-full" @click="$dispatch('open-palette')"
-                aria-label="Search — Command K">
+        <button id="palette-trigger" type="button" class="ui-side-link w-full" @click="$dispatch('open-palette')"
+                aria-haspopup="dialog" aria-label="Search — Command K">
           ${icon("search", "size-[18px] shrink-0")}
           <span class="flex-1 text-left">Search</span>
           <kbd class="rounded border border-line bg-subtle px-1.5 py-0.5 text-[0.6875rem] text-muted">⌘K</kbd>
@@ -436,7 +442,7 @@ function hostLayout(options: LayoutOptions, dataScript: string): string {
        @keydown.meta.k.window.prevent="toggle()" @keydown.ctrl.k.window.prevent="toggle()"
        @keydown.escape.window="if (open) close()">
     <div x-show="open" x-cloak class="fixed inset-0 z-[60] bg-ink/40" @click="close()"></div>
-    <div x-show="open" x-cloak x-transition.duration.120ms
+    <div x-show="open" x-cloak x-transition.duration.120ms role="dialog" aria-modal="true" aria-label="Search"
          class="fixed inset-x-4 top-[10vh] z-[61] mx-auto max-w-xl" @click.outside="close()">
       <div class="ui-card overflow-hidden p-0">
         <input x-ref="input" x-model="q" @input="onInput()" @keydown="onKeydown($event)"
@@ -450,7 +456,7 @@ function hostLayout(options: LayoutOptions, dataScript: string): string {
                  x-text="item.label"></div>
           </template>
           <template x-for="(item, index) in items" :key="item.key">
-            <button x-show="!item.header" type="button" @click="go(item)" @mouseenter="selected = index"
+            <button x-show="!item.header" type="button" tabindex="-1" @click="go(item)" @mouseenter="selected = index"
                     class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm"
                     :class="selected === index ? 'bg-subtle' : ''">
               <span class="min-w-0 flex-1 truncate text-ink" x-text="item.label"></span>

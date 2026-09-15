@@ -15,6 +15,7 @@ export interface SearchResultEventType {
 }
 
 export interface SearchResultAttendee {
+  id: number;
   booking_id: number;
   guest_name: string;
   guest_email: string;
@@ -88,7 +89,7 @@ export async function searchAttendees(
   const pattern = `%${escapeLike(q)}%`;
   const { results } = await db
     .prepare(
-      `SELECT a.booking_id, a.guest_name, a.guest_email
+      `SELECT a.id, a.booking_id, a.guest_name, a.guest_email
        FROM booking_attendees a
        JOIN bookings b ON b.id = a.booking_id
        WHERE b.user_id = ?
