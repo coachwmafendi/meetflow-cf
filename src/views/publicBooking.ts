@@ -1,4 +1,4 @@
-import { escapeHtml, layout } from "./layout";
+import { escapeHtml, layout, themeToggle } from "./layout";
 import { utcToZonedParts } from "../lib/timezone";
 import { zoneDisplay } from "../lib/timezoneList";
 import { avatar, badge, button, emptyState, icon } from "./ui";
@@ -146,15 +146,18 @@ export function bookingPage(
 
             <!-- Host + event summary -->
             <aside class="border-b border-line p-5 sm:p-6 lg:border-b-0 lg:border-r">
-              <a href="/${escapeHtml(host.slug)}" class="group flex items-center gap-2.5">
-                ${avatar(host.name, host.avatar_key, "size-10", "text-sm")}
-                <span class="min-w-0">
-                  <span class="block truncate text-sm font-medium text-ink group-hover:underline">
-                    ${escapeHtml(host.name)}
+              <div class="flex items-start justify-between gap-2">
+                <a href="/${escapeHtml(host.slug)}" class="group flex items-center gap-2.5">
+                  ${avatar(host.name, host.avatar_key, "size-10", "text-sm")}
+                  <span class="min-w-0">
+                    <span class="block truncate text-sm font-medium text-ink group-hover:underline">
+                      ${escapeHtml(host.name)}
+                    </span>
+                    <span class="block text-[0.75rem] text-muted">View public page</span>
                   </span>
-                  <span class="block text-[0.75rem] text-muted">View public page</span>
-                </span>
-              </a>
+                </a>
+                ${themeToggle()}
+              </div>
 
               <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">${escapeHtml(
                 eventType.name,

@@ -50,8 +50,9 @@ const THEME_TOGGLE_SCRIPT = `<script>
 
     function label() {
       var mode = root.getAttribute("data-theme") || "system";
+      var next = mode === "system" ? "dark" : mode === "dark" ? "light" : "system";
       btn.setAttribute("aria-label", "Theme: " + mode + ". Click to change.");
-      btn.setAttribute("title", "Theme: " + mode);
+      btn.setAttribute("title", "Theme: " + mode + " — click for " + next);
       btn.dataset.mode = mode;
     }
 
@@ -111,7 +112,7 @@ const COPY_LINK_SCRIPT = `
     })();
   </script>`;
 
-function themeToggle(): string {
+export function themeToggle(): string {
   return `<button id="theme-toggle" type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2"
             aria-label="Change theme">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
@@ -287,12 +288,18 @@ export function layout(options: LayoutOptions): string {
   ${options.scripts === false ? "" : '<script defer src="/vendor/alpine.min.js"></script>'}
 </head>
 <body class="flex min-h-full flex-col bg-canvas text-body antialiased">
+  ${
+    options.width === "sm" || options.width === "md"
+      ? `<div class="fixed right-4 top-4 z-40">${themeToggle()}</div>`
+      : ""
+  }
   <main class="${
     options.width === "full"
       ? "flex-1"
       : `mx-auto w-full ${WIDTHS[options.width ?? "lg"]} flex-1 px-5 py-8 sm:px-6 sm:py-10`
   }">${options.body}</main>
   ${dataScript}
+  ${THEME_TOGGLE_SCRIPT}
 </body>
 </html>`;
 }
