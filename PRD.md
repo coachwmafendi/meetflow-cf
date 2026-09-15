@@ -250,6 +250,20 @@ the host is never back-to-back.
   so two concurrent guests can never create meetings closer than the buffer.
 - Buffer **before** meetings and per-weekday buffers are out of scope.
 
+### Seats (group events)
+
+An event type may declare `seats_total` (1–100, default 1):
+
+- `1` — private appointment; exactly today's behaviour.
+- `N > 1` — group event: the first guest to book a slot fixes its time, the slot
+  then stays open until N guests have joined. Every guest is recorded as an
+  attendee, gets their own confirmation, and can cancel their own seat through a
+  signed link. Full slots become unavailable.
+- The `bookings` row keeps representing the slot (one per slot per type), so
+  overlap guards, buffers, the unique index and the reminder sweep are
+  unchanged. Reminders email each confirmed attendee.
+- Guest rescheduling is disabled for group slots in v1.
+
 ### Meeting location
 
 An event type may declare where the meeting happens:

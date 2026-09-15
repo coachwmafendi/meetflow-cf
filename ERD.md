@@ -185,6 +185,7 @@ Defines meetings that the host offers.
 | description      | TEXT    | No       | Event description                                   |
 | duration_minutes | INTEGER | Yes      | Meeting duration                                    |
 | buffer_minutes   | INTEGER | Yes      | Gap after each booking (0–120, default 0)           |
+| seats_total      | INTEGER | Yes      | Guests per slot (1 = private, up to 100)            |
 | location_type    | TEXT    | Yes      | `none`, `google_meet`, `zoom`, `in_person`, `phone` |
 | location_value   | TEXT    | No       | Meet/Zoom URL, address, or phone                    |
 | is_active        | INTEGER | Yes      | 1 = active, 0 = inactive                            |
@@ -471,6 +472,29 @@ CREATE TABLE bookings (
 
 -- 0003_reminders.sql
 ALTER TABLE bookings ADD COLUMN reminder_sent_at TEXT;
+
+-- 0008_seats.sql
+ALTER TABLE event_types ADD COLUMN seats_total INTEGER NOT NULL DEFAULT 1;
+
+CREATE TABLE booking_attendees (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    booking_id INTEGER NOT NULL,
+    guest_name TEXT NOT NULL,
+    guest_email TEXT NOT NULL,
+    notes TEXT,
+    timezone TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'confirmed',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+
+    FOREIGN KEY (booking_id)
+        REFERENCES bookings(id)
+        ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX idx_attendees_unique_confirmed
+ON booking_attendees(booking_id, guest_email)
+WHERE status = 'confirmed';
 
 -- 0005_saved_locations.sql
 CREATE TABLE saved_locations (

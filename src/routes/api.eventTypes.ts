@@ -47,6 +47,8 @@ eventTypeRoutes.post("/", async (c) => {
       body.buffer_minutes === undefined
         ? 0
         : requireInt(body, "buffer_minutes", { min: 0, max: 120 });
+    const seatsTotal =
+      body.seats_total === undefined ? 1 : requireInt(body, "seats_total", { min: 1, max: 100 });
 
     const locationType = String(body.location_type ?? "none");
     if (!isLocationType(locationType)) {
@@ -73,6 +75,7 @@ eventTypeRoutes.post("/", async (c) => {
       description,
       durationMinutes,
       bufferMinutes,
+      seatsTotal,
       locationType,
       locationValue,
       now: nowIso(),
@@ -151,6 +154,10 @@ eventTypeRoutes.patch("/:id", async (c) => {
         body.buffer_minutes === undefined
           ? current.buffer_minutes
           : requireInt(body, "buffer_minutes", { min: 0, max: 120 }),
+      seatsTotal:
+        body.seats_total === undefined
+          ? current.seats_total
+          : requireInt(body, "seats_total", { min: 1, max: 100 }),
       locationType,
       locationValue,
       isActive:
@@ -188,6 +195,7 @@ eventTypeRoutes.delete("/:id", async (c) => {
       description: current.description,
       durationMinutes: current.duration_minutes,
       bufferMinutes: current.buffer_minutes,
+      seatsTotal: current.seats_total,
       locationType: current.location_type,
       locationValue: current.location_value,
       isActive: 0,

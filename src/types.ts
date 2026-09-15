@@ -29,6 +29,8 @@ export interface EventTypeRow {
   duration_minutes: number;
   /** Minutes of gap left after each booking of this type (0 = none). */
   buffer_minutes: number;
+  /** Guests a single slot can hold. 1 = private appointment; N > 1 = group. */
+  seats_total: number;
   is_active: number;
   /** "none" | "google_meet" | "zoom" | "in_person" | "phone" */
   location_type: string;
@@ -62,6 +64,21 @@ export interface BookingRow {
   timezone: string;
   status: BookingStatus;
   notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AttendeeStatus = "confirmed" | "cancelled";
+
+/** A guest occupying one of a slot's seats. */
+export interface BookingAttendeeRow {
+  id: number;
+  booking_id: number;
+  guest_name: string;
+  guest_email: string;
+  notes: string | null;
+  timezone: string;
+  status: AttendeeStatus;
   created_at: string;
   updated_at: string;
 }

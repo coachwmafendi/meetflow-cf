@@ -184,10 +184,13 @@ dashboard.post("/event-types", async (c) => {
   const slug = String(form.slug ?? "").toLowerCase();
   const duration = Number(form.duration_minutes);
   const bufferMinutes = Number(form.buffer_minutes);
+  const seatsTotal = Number(form.seats_total);
   const locationType = isLocationType(String(form.location_type ?? ""))
     ? String(form.location_type)
     : "none";
   const locationValue = normalizeLocationValue(locationType, String(form.location_value ?? ""));
+  const seats =
+    Number.isInteger(seatsTotal) && seatsTotal >= 1 && seatsTotal <= 100 ? seatsTotal : 1;
   let ok = false;
   if (isEventSlug(slug) && Number.isInteger(duration) && duration >= 5 && duration <= 480) {
     try {
@@ -201,6 +204,7 @@ dashboard.post("/event-types", async (c) => {
           Number.isInteger(bufferMinutes) && bufferMinutes >= 0 && bufferMinutes <= 120
             ? bufferMinutes
             : 0,
+        seatsTotal: seats,
         locationType,
         locationValue: locationType === "none" ? null : locationValue,
         now: nowIso(),
@@ -243,9 +247,12 @@ dashboard.post("/event-types/:id", async (c) => {
   const slug = String(form.slug ?? "").toLowerCase();
   const duration = Number(form.duration_minutes);
   const bufferMinutes = Number(form.buffer_minutes);
+  const seatsTotal = Number(form.seats_total);
   const locationType = isLocationType(String(form.location_type ?? ""))
     ? String(form.location_type)
     : "none";
+  const seats =
+    Number.isInteger(seatsTotal) && seatsTotal >= 1 && seatsTotal <= 100 ? seatsTotal : 1;
   const savedChoice = String(form.saved_location_value ?? "");
   const locationValue = normalizeLocationValue(
     locationType,
@@ -261,6 +268,9 @@ dashboard.post("/event-types/:id", async (c) => {
     slug: slug || current.slug,
     duration_minutes: Number.isInteger(duration) ? duration : current.duration_minutes,
     buffer_minutes: Number.isInteger(bufferMinutes) ? bufferMinutes : current.buffer_minutes,
+    seats_total: Number.isInteger(seatsTotal) && seatsTotal >= 1 && seatsTotal <= 100
+      ? seatsTotal
+      : current.seats_total,
     description:
       form.description !== undefined ? String(form.description).trim() : current.description,
     location_type: locationType,
@@ -277,7 +287,10 @@ dashboard.post("/event-types/:id", async (c) => {
           : form.buffer_minutes !== undefined &&
               (!Number.isInteger(bufferMinutes) || bufferMinutes < 0 || bufferMinutes > 120)
             ? "Buffer must be between 0 and 120 minutes."
-            : locationType !== "none" && !locationValue
+            : form.seats_total !== undefined &&
+                (!Number.isInteger(seatsTotal) || seatsTotal < 1 || seatsTotal > 100)
+              ? "Seats must be between 1 and 100."
+              : locationType !== "none" && !locationValue
               ? "Location needs an address, link or number."
               : null;
   if (invalid) return html(eventTypeEditPage(user, draft, bookings, invalid), 400);
@@ -289,6 +302,9 @@ dashboard.post("/event-types/:id", async (c) => {
       description: form.description ? String(form.description).trim() : null,
       durationMinutes: duration,
       bufferMinutes: Number.isInteger(bufferMinutes) ? bufferMinutes : current.buffer_minutes,
+      seatsTotal: Number.isInteger(seatsTotal) && seatsTotal >= 1 && seatsTotal <= 100
+        ? seatsTotal
+        : current.seats_total,
       locationType,
       locationValue: locationType === "none" ? null : locationValue,
       isActive: current.is_active,

@@ -358,6 +358,11 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
             <h3 class="truncate text-sm font-semibold text-ink">${escapeHtml(e.name)}</h3>
+            ${
+              e.seats_total > 1
+                ? `<span class="ui-badge ui-badge-neutral">Group · ${e.seats_total} seats</span>`
+                : ""
+            }
             <span class="ui-badge" :class="active ? 'ui-badge-success' : 'ui-badge-neutral'"
                   x-text="active ? 'Active' : 'Inactive'">Active</span>
           </div>
@@ -701,6 +706,17 @@ export function eventTypeEditPage(
             value: String(eventType.buffer_minutes),
             hint: "Minutes of breathing room after each booking.",
             attrsHtml: 'min="0" max="120" step="5"',
+          })}
+          ${field({
+            name: "seats_total",
+            label: "Seats",
+            type: "number",
+            value: String(eventType.seats_total),
+            hint:
+              eventType.seats_total > 1
+                ? `Group event — up to ${eventType.seats_total} guests share a slot.`
+                : "1 = private appointment. Raise it to run group events.",
+            attrsHtml: 'min="1" max="100" step="1"',
           })}
           ${field({
             name: "description",

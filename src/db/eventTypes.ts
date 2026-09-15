@@ -70,6 +70,8 @@ export interface InsertEventTypeInput {
   description: string | null;
   durationMinutes: number;
   bufferMinutes: number;
+  /** Guests a single slot can hold (1 = private). */
+  seatsTotal: number;
   locationType: string;
   locationValue: string | null;
   now: string;
@@ -81,8 +83,8 @@ export async function insertEventType(
 ): Promise<EventTypeRow> {
   const row = await db
     .prepare(
-      `INSERT INTO event_types (user_id, name, slug, description, duration_minutes, buffer_minutes, location_type, location_value, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+      `INSERT INTO event_types (user_id, name, slug, description, duration_minutes, buffer_minutes, seats_total, location_type, location_value, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
        RETURNING *`,
     )
     .bind(
@@ -92,6 +94,7 @@ export async function insertEventType(
       input.description,
       input.durationMinutes,
       input.bufferMinutes,
+      input.seatsTotal,
       input.locationType,
       input.locationValue,
       input.now,
@@ -109,6 +112,8 @@ export interface UpdateEventTypeInput {
   description: string | null;
   durationMinutes: number;
   bufferMinutes: number;
+  /** Guests a single slot can hold (1 = private). */
+  seatsTotal: number;
   locationType: string;
   locationValue: string | null;
   isActive: number;
@@ -135,6 +140,7 @@ export async function updateEventType(
       input.description,
       input.durationMinutes,
       input.bufferMinutes,
+      input.seatsTotal,
       input.locationType,
       input.locationValue,
       input.isActive,
