@@ -82,6 +82,11 @@ describe("GET /api/search", () => {
     const res = await api("/api/search?q=ahmad", { cookie: ali.host.cookie });
     const body = await res.json<{ bookings: unknown[] }>();
     expect(body.bookings).toEqual([]);
+
+    const resConsult = await api("/api/search?q=consult", { cookie: ali.host.cookie });
+    const bodyConsult = await resConsult.json<{ eventTypes: Array<{ slug: string }> }>();
+    expect(bodyConsult.eventTypes).toHaveLength(1);
+    expect(bodyConsult.eventTypes[0]!.slug).toBe("consultation");
   });
 
   it("finds an event type by name and slug", async () => {
@@ -119,6 +124,8 @@ describe("GET /api/search", () => {
     const { host, eventType } = await seedHost("wan");
     await insertBooking(host.id, eventType.id, "2026-09-21T05:00:00Z");
     await insertBooking(host.id, eventType.id, "2026-09-28T05:00:00Z");
+    await insertBooking(host.id, eventType.id, "2026-10-05T05:00:00Z");
+    await insertBooking(host.id, eventType.id, "2026-10-12T05:00:00Z");
 
     const res = await api("/api/search", { cookie: host.cookie });
     const body = await res.json<{
@@ -126,7 +133,7 @@ describe("GET /api/search", () => {
       eventTypes: unknown[];
       attendees: unknown[];
     }>();
-    expect(body.bookings).toHaveLength(2);
+    expect(body.bookings).toHaveLength(3);
     expect(body.eventTypes).toEqual([]);
     expect(body.attendees).toEqual([]);
   });

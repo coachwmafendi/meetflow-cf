@@ -22,7 +22,9 @@ export interface SearchResultAttendee {
 
 /**
  * Escapes LIKE wildcards so the guest's text matches literally: a query of
- * "%ahmad%" must not be read as a pattern.
+ * "%ahmad%" must not be read as a pattern. Note: SQLite LIKE case-folding is
+ * ASCII-only (acceptable for now; non-Latin names would need a different
+ * collation).
  */
 export function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
