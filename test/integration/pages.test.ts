@@ -21,10 +21,10 @@ describe("pages", () => {
     const html = await res.text();
     expect(html).toContain("Sign in");
     expect(html).toContain("Show password");
-    expect(html).toContain('data-tz="Asia/Kuala_Lumpur"');
-    expect(html).toContain("Kuala Lumpur");
-    expect(html).toContain("auth-bg-glow");
-    expect(html).toContain("auth-globe");
+    expect(html).toContain("auth-map");
+    expect(html).toContain('data-offset="8"');
+    expect(html).toContain("UTC+8");
+    expect(html).toContain("UTC-8");
   });
 
   it("serves the marketing page to anonymous visitors", async () => {

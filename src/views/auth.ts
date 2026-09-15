@@ -22,59 +22,40 @@ function passwordField(options: { hint?: string; attrsHtml?: string } = {}): str
     </div>`;
 }
 
-const WORLD_CLOCKS: Array<{
-  tz: string;
-  city: string;
-  x: number;
-  y: number;
-  flip?: boolean;
-}> = [
-  { tz: "America/Los_Angeles", city: "San Francisco", x: 15, y: 28 },
-  { tz: "America/New_York", city: "New York", x: 28, y: 23 },
-  { tz: "Europe/London", city: "London", x: 47, y: 16 },
-  { tz: "Asia/Tokyo", city: "Tokyo", x: 84, y: 26, flip: true },
-  { tz: "Asia/Kuala_Lumpur", city: "Kuala Lumpur", x: 74, y: 47, flip: true },
-  { tz: "Australia/Sydney", city: "Sydney", x: 81, y: 68, flip: true },
-];
+const UTC_OFFSETS = [-8, -6, -4, -2, 0, 2, 4, 6, 8];
 
-const worldGlobe = `
-  <svg viewBox="0 0 100 100" fill="none" aria-hidden="true" class="auth-globe">
-    <circle cx="50" cy="50" r="49" />
-    <ellipse cx="50" cy="50" rx="49" ry="16.33" />
-    <ellipse cx="50" cy="50" rx="49" ry="32.67" />
-    <ellipse cx="50" cy="50" rx="16.33" ry="49" />
-    <ellipse cx="50" cy="50" rx="32.67" ry="49" />
-    <line x1="1" y1="50" x2="99" y2="50" />
-    <line x1="50" y1="1" x2="50" y2="99" />
-  </svg>`;
+const utcTimeStrip = `
+  <div class="auth-times" aria-hidden="true">
+    ${UTC_OFFSETS.map(
+      (o) => `<div class="auth-time" data-offset="${o}">
+      <span class="auth-time-value" data-time-value>--:--</span>
+      <span class="auth-time-zone">${o >= 0 ? `UTC+${o}` : `UTC${o}`}</span>
+    </div>`,
+    ).join("")}
+  </div>`;
 
-const worldClocks = WORLD_CLOCKS.map(
-  (c) => `<div class="auth-clock${c.flip ? " auth-clock--flip" : ""}"
-       data-tz="${c.tz}" style="left:${c.x}%;top:${c.y}%">
-    <span class="auth-clock-dot"></span>
-    <span class="auth-clock-label">
-      <span class="auth-clock-time" data-clock-time>--:--</span>
-      <span class="auth-clock-city">${c.city}</span>
-    </span>
-  </div>`,
-).join("");
-
-const WORLD_CLOCK_SCRIPT = `
+const UTC_TIME_SCRIPT = `
   <script>
     (function () {
-      var clocks = document.querySelectorAll("[data-tz]");
-      if (!clocks.length) return;
+      var nodes = document.querySelectorAll("[data-offset]");
+      if (!nodes.length) return;
+      var localOffset = -new Date().getTimezoneOffset() / 60;
+      var local = null;
+      var best = Infinity;
+      nodes.forEach(function (el) {
+        var diff = Math.abs(parseInt(el.getAttribute("data-offset"), 10) - localOffset);
+        if (diff < best) { best = diff; local = el; }
+      });
+      if (local) local.classList.add("auth-time--local");
       function render() {
-        var now = new Date();
-        clocks.forEach(function (el) {
-          try {
-            el.querySelector("[data-clock-time]").textContent = new Intl.DateTimeFormat("en-GB", {
-              timeZone: el.getAttribute("data-tz"),
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            }).format(now);
-          } catch (e) { /* unknown zone — leave placeholder */ }
+        nodes.forEach(function (el) {
+          var offset = parseInt(el.getAttribute("data-offset"), 10);
+          var shifted = new Date(Date.now() + offset * 3600000);
+          var h = shifted.getUTCHours();
+          var h12 = h % 12 === 0 ? 12 : h % 12;
+          var m = String(shifted.getUTCMinutes()).padStart(2, "0");
+          el.querySelector("[data-time-value]").textContent =
+            h12 + ":" + m + " " + (h >= 12 ? "PM" : "AM");
         });
       }
       render();
@@ -97,14 +78,8 @@ function authShell(options: {
     width: "sm",
     body: `
       <div class="auth-bg" aria-hidden="true">
-        <div class="auth-bg-grid"></div>
-        <div class="auth-bg-glow auth-bg-glow-a"></div>
-        <div class="auth-bg-glow auth-bg-glow-b"></div>
-        <div class="auth-bg-glow auth-bg-glow-c"></div>
-        <div class="auth-globe-wrap">
-          ${worldGlobe}
-          ${worldClocks}
-        </div>
+        <div class="auth-map"></div>
+        ${utcTimeStrip}
       </div>
       <div class="relative z-10 mx-auto w-full max-w-[22rem] py-6 sm:py-10">
         <a href="/" class="mb-8 flex items-center justify-center gap-2 text-ink" aria-label="MeetFlow">
@@ -134,7 +109,7 @@ function authShell(options: {
         </div>
       </div>
       ${options.scriptHtml ?? ""}
-      ${WORLD_CLOCK_SCRIPT}`,
+      ${UTC_TIME_SCRIPT}`,
   });
 }
 
