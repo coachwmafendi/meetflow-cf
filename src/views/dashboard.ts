@@ -305,6 +305,14 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
           <p class="mt-2.5 truncate font-mono text-[0.75rem] text-muted">${escapeHtml(path)}</p>
         </div>
         <div class="relative flex shrink-0 items-center gap-2">
+          <form method="post" action="/dashboard/event-types/${e.id}/toggle" class="shrink-0">
+            <button type="submit" class="ui-switch" role="switch"
+                    aria-checked="${e.is_active ? "true" : "false"}"
+                    aria-label="${e.is_active ? "Deactivate" : "Activate"} ${escapeHtml(e.name)}"
+                    title="${e.is_active ? "Deactivate — hide from your public page" : "Activate — publish to your public page"}">
+              <span class="ui-switch-knob"></span>
+            </button>
+          </form>
           <a class="ui-btn ui-btn-ghost ui-btn-sm" href="${escapeHtml(path)}"
              target="_blank" rel="noopener">
             ${icon("external", "size-4")}<span>Open</span>
@@ -316,6 +324,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
             size: "sm",
           })}
           <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" aria-label="More actions"
+                  title="More actions"
                   :aria-expanded="open ? 'true' : 'false'" @click="open = !open">
             ${icon("menu", "size-4")}
           </button>

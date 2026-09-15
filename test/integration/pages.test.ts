@@ -75,11 +75,12 @@ describe("pages", () => {
 
   it("renders open/copy actions on event type cards", async () => {
     const host = await createHost("wan");
-    await SELF.fetch("https://example.com/api/event-types", {
+    const created = await SELF.fetch("https://example.com/api/event-types", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: host.cookie },
       body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 30 }),
     });
+    const { eventType } = await created.json<{ eventType: { id: number } }>();
     const res = await SELF.fetch("https://example.com/dashboard/event-types", {
       headers: { cookie: host.cookie },
     });
@@ -97,6 +98,30 @@ describe("pages", () => {
     expect(html).toContain('data-dialog-open="create-event-type"');
     expect(html).toContain('id="create-event-type"');
     expect(html).toContain("Buffer after meeting");
+    expect(html).toContain('role="switch"');
+    expect(html).toContain('aria-checked="true"');
+    expect(html).toContain(`/dashboard/event-types/${eventType.id}/toggle`);
+  });
+
+  it("toggles an event type from the card switch", async () => {
+    const host = await createHost("wan");
+    const created = await SELF.fetch("https://example.com/api/event-types", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 30 }),
+    });
+    const { eventType } = await created.json<{ eventType: { id: number } }>();
+    await SELF.fetch(`https://example.com/dashboard/event-types/${eventType.id}/toggle`, {
+      method: "POST",
+      headers: { cookie: host.cookie },
+    });
+    const res = await SELF.fetch("https://example.com/dashboard/event-types", {
+      headers: { cookie: host.cookie },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('aria-checked="false"');
+    expect(html).toContain("Inactive");
   });
 
   it("renders the search box wired to the event type cards", async () => {

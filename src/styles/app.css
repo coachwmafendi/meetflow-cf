@@ -317,6 +317,25 @@
     @apply border-danger/20 bg-danger-soft text-danger;
   }
 
+  /* --- Switch ------------------------------------------------------------ */
+  .ui-switch {
+    @apply inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border border-line
+           bg-subtle p-0 transition-colors duration-150 hover:border-line-strong
+           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+  }
+
+  .ui-switch[aria-checked="true"] {
+    @apply border-success/30 bg-success;
+  }
+
+  .ui-switch-knob {
+    @apply mx-0.5 size-4 rounded-full bg-surface shadow-xs transition-transform duration-150;
+  }
+
+  .ui-switch[aria-checked="true"] .ui-switch-knob {
+    @apply translate-x-4;
+  }
+
   /* --- Data ------------------------------------------------------------- */
   .ui-table {
     @apply w-full border-collapse text-left text-sm;
@@ -508,5 +527,23 @@
 
   .ui-rise {
     animation: ui-rise 0.32s var(--ease-out-quart) both;
+  }
+
+  /* Scroll-triggered reveal. Elements stay visible until the inline script
+     marks the page as animation-ready, so a JS failure never hides content. */
+  .reveal {
+    transition:
+      opacity 0.55s var(--ease-out-quart),
+      transform 0.55s var(--ease-out-quart);
+  }
+
+  .reveal-anim .reveal {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  .reveal-anim .reveal-in {
+    opacity: 1;
+    transform: none;
   }
 }
