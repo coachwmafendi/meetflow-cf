@@ -333,6 +333,7 @@ dashboard.post("/event-types/:id/toggle", async (c) => {
     description: current.description,
     durationMinutes: current.duration_minutes,
     bufferMinutes: current.buffer_minutes,
+    seatsTotal: current.seats_total,
     locationType: current.location_type,
     locationValue: current.location_value,
     isActive: nextActive,
