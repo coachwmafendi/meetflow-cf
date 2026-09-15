@@ -1,4 +1,4 @@
-import { escapeHtml, layout } from "./layout";
+import { escapeHtml, layout, themeToggle } from "./layout";
 import { button, icon, type IconName } from "./ui";
 
 /**
@@ -150,6 +150,51 @@ const FEATURES: Array<{ icon: IconName; title: string; body: string }> = [
   },
 ];
 
+const TOUR: Array<{ id: string; icon: IconName; label: string; src: string; alt: string }> = [
+  {
+    id: "dashboard",
+    icon: "grid",
+    label: "Dashboard",
+    src: "/images/dashboard-desktop.png",
+    alt: "The MeetFlow dashboard",
+  },
+  {
+    id: "event-types",
+    icon: "layers",
+    label: "Event types",
+    src: "/images/event-types-desktop.png",
+    alt: "Event types list",
+  },
+  {
+    id: "availability",
+    icon: "clock",
+    label: "Availability",
+    src: "/images/availability-desktop.png",
+    alt: "Weekly availability editor",
+  },
+  {
+    id: "booking-page",
+    icon: "globe",
+    label: "Booking page",
+    src: "/images/booking-page-desktop.png",
+    alt: "A public booking page",
+  },
+  {
+    id: "confirmation",
+    icon: "check",
+    label: "Confirmation",
+    src: "/images/confirmation-desktop.png",
+    alt: "Booking confirmation page",
+  },
+  {
+    id: "bookings",
+    icon: "calendar",
+    label: "Bookings",
+    src: "/images/bookings-desktop.png",
+    alt: "Bookings list",
+  },
+];
+
 const STEPS: Array<{ n: string; title: string; body: string }> = [
   {
     n: "01",
@@ -170,20 +215,44 @@ const STEPS: Array<{ n: string; title: string; body: string }> = [
 
 export function marketingPage(): string {
   const featureCards = FEATURES.map(
-    (f) => `<div class="ui-card ui-card-pad">
-      <span class="flex size-9 items-center justify-center rounded-lg border border-line bg-subtle text-muted">
-        ${icon(f.icon, "size-[17px]")}
-      </span>
-      <h3 class="mt-4 text-sm font-semibold text-ink">${escapeHtml(f.title)}</h3>
-      <p class="mt-1.5 text-[0.8125rem] leading-relaxed text-muted">${escapeHtml(f.body)}</p>
+    (f, i) => `<div class="reveal" style="transition-delay:${(i % 3) * 70}ms">
+      <div class="ui-card ui-card-pad h-full transition-[transform,border-color,box-shadow]
+                  duration-200 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-md">
+        <span class="flex size-9 items-center justify-center rounded-lg border border-line bg-subtle text-muted">
+          ${icon(f.icon, "size-[17px]")}
+        </span>
+        <h3 class="mt-4 text-sm font-semibold text-ink">${escapeHtml(f.title)}</h3>
+        <p class="mt-1.5 text-[0.8125rem] leading-relaxed text-muted">${escapeHtml(f.body)}</p>
+      </div>
     </div>`,
   ).join("");
 
   const steps = STEPS.map(
-    (s) => `<div>
+    (s, i) => `<div class="reveal" style="transition-delay:${i * 90}ms">
       <p class="ui-time text-sm font-semibold text-accent">${s.n}</p>
       <h3 class="mt-2 text-sm font-semibold text-ink">${escapeHtml(s.title)}</h3>
       <p class="mt-1.5 max-w-xs text-[0.8125rem] leading-relaxed text-muted">${escapeHtml(s.body)}</p>
+    </div>`,
+  ).join("");
+
+  const tourTabs = TOUR.map(
+    (t, i) => `<button type="button" role="tab" id="tour-tab-${t.id}"
+        aria-controls="tour-${t.id}" aria-selected="${i === 0}"
+        tabindex="${i === 0 ? 0 : -1}"
+        class="inline-flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5
+               text-[0.8125rem] font-medium text-muted transition-colors hover:text-ink
+               aria-selected:border-ink aria-selected:bg-ink aria-selected:text-on-primary
+               focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+        ${icon(t.icon, "size-3.5 shrink-0")}<span>${escapeHtml(t.label)}</span>
+      </button>`,
+  ).join("");
+
+  const tourPanels = TOUR.map(
+    (t, i) => `<div role="tabpanel" id="tour-${t.id}" aria-labelledby="tour-tab-${t.id}"${
+      i === 0 ? "" : " hidden"
+    }>
+      <img src="${t.src}" alt="${escapeHtml(t.alt)}"${i === 0 ? "" : ' loading="lazy"'}
+           class="aspect-[16/10] w-full rounded-lg border border-line bg-subtle object-cover object-top">
     </div>`,
   ).join("");
 
@@ -199,8 +268,10 @@ export function marketingPage(): string {
           <nav class="hidden items-center gap-1 md:flex" aria-label="Page">
             <a class="ui-nav-link" href="#features">Features</a>
             <a class="ui-nav-link" href="#how">How it works</a>
+            <a class="ui-nav-link" href="#tour">Tour</a>
           </nav>
           <div class="flex items-center gap-2">
+            ${themeToggle()}
             ${button({ label: "Sign in", href: "/login", variant: "ghost", size: "sm" })}
             ${button({ label: "Get started", href: "/register", variant: "primary", size: "sm" })}
           </div>
@@ -211,15 +282,16 @@ export function marketingPage(): string {
         <div class="grid items-center gap-12 lg:grid-cols-2 lg:gap-10">
 
           <div>
-            <p class="ui-eyebrow">Scheduling for independent professionals</p>
-            <h1 class="mt-3 text-4xl font-semibold leading-[1.08] tracking-[-0.03em] text-ink sm:text-5xl">
+            <p class="ui-eyebrow ui-rise">Scheduling for independent professionals</p>
+            <h1 class="ui-rise mt-3 text-4xl font-semibold leading-[1.08] tracking-[-0.03em] text-ink sm:text-5xl"
+                style="animation-delay:60ms">
               Take bookings, not back-and-forth.
             </h1>
-            <p class="mt-4 max-w-lg text-base leading-relaxed text-body">
+            <p class="ui-rise mt-4 max-w-lg text-base leading-relaxed text-body" style="animation-delay:120ms">
               MeetFlow turns your availability into a shareable booking page. Guests pick a time
               that suits them; you keep control of your hours. No account needed to book.
             </p>
-            <div class="mt-7 flex flex-wrap items-center gap-3">
+            <div class="ui-rise mt-7 flex flex-wrap items-center gap-3" style="animation-delay:180ms">
               ${button({
                 label: "Get started free",
                 href: "/register",
@@ -233,19 +305,20 @@ export function marketingPage(): string {
                 className: "h-10 px-5 text-[0.9375rem]",
               })}
             </div>
-            <p class="mt-5 flex items-center gap-1.5 text-[0.8125rem] text-muted">
+            <p class="ui-rise mt-5 flex items-center gap-1.5 text-[0.8125rem] text-muted"
+               style="animation-delay:240ms">
               ${icon("check", "size-3.5 shrink-0")}
               <span>Free to start · No credit card · Set up in minutes</span>
             </p>
           </div>
 
-          <div>${demoBookingCard()}</div>
+          <div class="ui-rise" style="animation-delay:200ms">${demoBookingCard()}</div>
 
         </div>
       </section>
 
       <section class="border-y border-line bg-subtle/50" aria-label="Who it is for">
-        <div class="mx-auto w-full max-w-5xl px-5 py-7 sm:px-6">
+        <div class="reveal mx-auto w-full max-w-5xl px-5 py-7 sm:px-6">
           <p class="ui-eyebrow text-center">Built for</p>
           <p class="mt-3 text-center text-sm text-body">
             Consultants · Freelancers · Coaches · Tutors · Salespeople · Agencies
@@ -282,8 +355,26 @@ export function marketingPage(): string {
         </div>
       </section>
 
+      <section id="tour" class="mx-auto w-full max-w-5xl px-5 py-16 sm:px-6 sm:py-20">
+        <div class="max-w-xl">
+          <p class="ui-eyebrow">Product tour</p>
+          <h2 class="mt-3 text-2xl font-semibold tracking-[-0.02em] text-ink sm:text-3xl">
+            One calm workspace for the whole flow.
+          </h2>
+          <p class="mt-3 text-body">
+            Availability, event types, bookings and guest confirmations — all in one place.
+          </p>
+        </div>
+        <div class="reveal mt-8 flex flex-wrap gap-2" role="tablist" aria-label="Product tour">
+          ${tourTabs}
+        </div>
+        <div class="reveal mt-4 rounded-xl border border-line bg-surface p-1.5 shadow-md sm:p-2">
+          ${tourPanels}
+        </div>
+      </section>
+
       <section class="mx-auto w-full max-w-5xl px-5 py-16 sm:px-6 sm:py-20">
-        <div class="ui-card ui-card-pad flex flex-col items-center text-center">
+        <div class="reveal ui-card ui-card-pad flex flex-col items-center text-center">
           <h2 class="text-2xl font-semibold tracking-[-0.02em] text-ink">
             Ready to take bookings?
           </h2>
@@ -306,10 +397,67 @@ export function marketingPage(): string {
           <nav class="flex items-center gap-5 text-[0.8125rem] text-muted" aria-label="Footer">
             <a class="transition-colors hover:text-ink" href="#features">Features</a>
             <a class="transition-colors hover:text-ink" href="#how">How it works</a>
+            <a class="transition-colors hover:text-ink" href="#tour">Tour</a>
             <a class="transition-colors hover:text-ink" href="/login">Sign in</a>
             <a class="transition-colors hover:text-ink" href="/register">Get started</a>
+            <a class="transition-colors hover:text-ink" href="/privacy">Privacy</a>
+            <a class="transition-colors hover:text-ink" href="/terms">Terms</a>
           </nav>
         </div>
-      </footer>`,
+      </footer>
+
+      <script>
+        (function () {
+          var tour = document.getElementById("tour");
+          if (!tour) return;
+          var tabs = Array.prototype.slice.call(tour.querySelectorAll('[role="tab"]'));
+          var panels = Array.prototype.slice.call(tour.querySelectorAll('[role="tabpanel"]'));
+
+          function select(id) {
+            tabs.forEach(function (t) {
+              var on = t.getAttribute("aria-controls") === id;
+              t.setAttribute("aria-selected", on ? "true" : "false");
+              t.tabIndex = on ? 0 : -1;
+            });
+            panels.forEach(function (p) {
+              p.hidden = p.id !== id;
+            });
+          }
+
+          tabs.forEach(function (t) {
+            t.addEventListener("click", function () {
+              select(t.getAttribute("aria-controls"));
+            });
+            t.addEventListener("keydown", function (e) {
+              if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+              e.preventDefault();
+              var next = tabs[(tabs.indexOf(t) + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+              select(next.getAttribute("aria-controls"));
+              next.focus();
+            });
+          });
+        })();
+      </script>
+
+      <script>
+        (function () {
+          var items = Array.prototype.slice.call(document.querySelectorAll(".reveal"));
+          if (!items.length) return;
+          var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          if (reduced || !("IntersectionObserver" in window)) {
+            items.forEach(function (el) { el.classList.add("reveal-in"); });
+            return;
+          }
+          document.body.classList.add("reveal-anim");
+          var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+              if (!entry.isIntersecting) return;
+              entry.target.classList.add("reveal-in");
+              io.unobserve(entry.target);
+            });
+          }, { rootMargin: "0px 0px -6% 0px", threshold: 0.05 });
+          items.forEach(function (el) { io.observe(el); });
+        })();
+      </script>`,
   });
 }
