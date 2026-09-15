@@ -517,6 +517,12 @@ Settings
 
 The sidebar footer also offers "view public page", "copy public page link" and "settings".
 
+A global ⌘K command palette opens from anywhere in the host dashboard — ⌘K or Ctrl+K toggles it,
+and the sidebar search button does the same for mouse users. It searches appointments (guest
+name, email and notes), event types (name, slug and description) and attendees, and doubles as
+quick navigation plus a "New event type" action. An empty query shows the 3 latest appointments
+as "Recent". ↑/↓ move the selection, Enter opens it and Esc closes the palette.
+
 Dashboard should show:
 
 - Upcoming bookings
@@ -742,6 +748,15 @@ GET  /api/bookings/stats
 GET  /api/bookings/:id
 POST /api/bookings/:id/cancel
 ```
+
+### Search
+
+```http
+GET /api/search?q=<query>
+```
+
+Host-scoped `LIKE` search over bookings, event types and attendees; ≤5 results per group. An
+empty query returns the 3 latest bookings. Queries over 100 characters are rejected.
 
 ### HTML pages
 
