@@ -5,6 +5,7 @@ import { bookingRoutes } from "./routes/api.bookings";
 import { availabilityRoutes } from "./routes/api.availability";
 import { eventTypeRoutes } from "./routes/api.eventTypes";
 import { publicRoutes } from "./routes/api.public";
+import { searchRoutes } from "./routes/api.search";
 import { pageRoutes } from "./routes/pages";
 import { handleEmailBatch, queueDueReminders, type EmailJob } from "./services/email";
 import type { AppEnv, Env } from "./types";
@@ -20,6 +21,7 @@ app.route("/api/event-types", eventTypeRoutes);
 app.route("/api/availability", availabilityRoutes);
 app.route("/api/public", publicRoutes);
 app.route("/api/bookings", bookingRoutes);
+app.route("/api/search", searchRoutes);
 
 app.route("/", pageRoutes);
 
