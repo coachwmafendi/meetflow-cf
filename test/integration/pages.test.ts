@@ -14,6 +14,26 @@ describe("pages", () => {
     expect(html).toContain("Show password");
   });
 
+  it("serves the marketing page to anonymous visitors", async () => {
+    const res = await SELF.fetch("https://example.com/");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("Take bookings");
+    expect(html).toContain("/register");
+    expect(html).not.toContain("/vendor/alpine.min.js");
+  });
+
+  it("redirects a signed-in host from / to the dashboard", async () => {
+    const host = await createHost("wan");
+    const res = await SELF.fetch("https://example.com/", {
+      headers: { cookie: host.cookie },
+      redirect: "manual",
+    });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/dashboard");
+  });
+
   it("redirects an anonymous visitor away from the dashboard", async () => {
     const res = await SELF.fetch("https://example.com/dashboard", { redirect: "manual" });
     expect(res.status).toBe(302);

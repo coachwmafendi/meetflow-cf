@@ -33,6 +33,7 @@ import {
 } from "../services/booking";
 import { queueBookingCancelled, queueBookingCreated } from "../services/email";
 import { loginPage, registerPage } from "../views/auth";
+import { marketingPage } from "../views/marketing";
 import {
   availabilityPage,
   bookingsPage,
@@ -72,7 +73,7 @@ const readToast = (c: Context<AppEnv>) => (c.req.query("toast") ?? "").slice(0, 
 const toastRedirect = (c: Context<AppEnv>, path: string, message?: string) =>
   c.redirect(`${path}${message ? `?toast=${encodeURIComponent(message)}` : ""}`, 302);
 
-pageRoutes.get("/", (c) => (c.get("user") ? c.redirect("/dashboard") : c.redirect("/login")));
+pageRoutes.get("/", (c) => (c.get("user") ? c.redirect("/dashboard") : html(marketingPage())));
 
 pageRoutes.get("/login", (c) => (c.get("user") ? c.redirect("/dashboard") : html(loginPage())));
 pageRoutes.get("/register", (c) =>

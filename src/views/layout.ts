@@ -17,8 +17,12 @@ export interface LayoutOptions {
   toast?: string;
   /** Host's public username, used by the sidebar's public-page actions. */
   hostSlug?: string;
-  /** Constrains <main>. Auth and booking screens are narrower than the dashboard. */
-  width?: "sm" | "md" | "lg";
+  /** Constrains <main>. Auth and booking screens are narrower than the dashboard.
+   *  "full" removes the constraint and the outer padding for marketing-style pages. */
+  width?: "sm" | "md" | "lg" | "full";
+  /** Whether to load Alpine.js. Pages with no Alpine directives can skip the
+   *  request. Defaults to true. */
+  scripts?: boolean;
 }
 
 /**
@@ -135,7 +139,7 @@ const HOST_NAV = [
   { href: "/dashboard/bookings", label: "Bookings", icon: "calendar" },
 ] as const;
 
-const WIDTHS = { sm: "max-w-md", md: "max-w-3xl", lg: "max-w-5xl" } as const;
+const WIDTHS = { sm: "max-w-md", md: "max-w-3xl", lg: "max-w-5xl", full: "" } as const;
 
 /** The mark. A calendar grid where one cell is filled — the booked slot. */
 function wordmark(href: string): string {
@@ -280,12 +284,14 @@ export function layout(options: LayoutOptions): string {
   <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/app.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23222'/%3E%3Crect x='7' y='11' width='6' height='5' rx='1.5' fill='white'/%3E%3C/svg%3E">
-  <script defer src="/vendor/alpine.min.js"></script>
+  ${options.scripts === false ? "" : '<script defer src="/vendor/alpine.min.js"></script>'}
 </head>
 <body class="flex min-h-full flex-col bg-canvas text-body antialiased">
-  <main class="mx-auto w-full ${
-    WIDTHS[options.width ?? "lg"]
-  } flex-1 px-5 py-8 sm:px-6 sm:py-10">${options.body}</main>
+  <main class="${
+    options.width === "full"
+      ? "flex-1"
+      : `mx-auto w-full ${WIDTHS[options.width ?? "lg"]} flex-1 px-5 py-8 sm:px-6 sm:py-10`
+  }">${options.body}</main>
   ${dataScript}
 </body>
 </html>`;

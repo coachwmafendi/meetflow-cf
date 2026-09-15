@@ -11,5 +11,12 @@ declare namespace Cloudflare {
     RATE_LIMIT_OVERRIDES?: string;
     /** Resend API key. Absent means email is switched off, not broken. */
     RESEND_API_KEY?: string;
+    /**
+     * Google Calendar OAuth app + token encryption key. All three absent means
+     * the calendar connection is switched off and availability behaves as before.
+     */
+    GOOGLE_CLIENT_ID?: string;
+    GOOGLE_CLIENT_SECRET?: string;
+    GOOGLE_TOKEN_KEY?: string;
   }
 }
