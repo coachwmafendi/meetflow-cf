@@ -362,6 +362,18 @@
     @apply absolute;
   }
 
+  .auth-globe {
+    @apply absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:block;
+    width: min(64vh, 40rem);
+    height: min(64vh, 40rem);
+    stroke: var(--color-line-strong);
+    opacity: 0.8;
+  }
+
+  .auth-globe * {
+    stroke-width: 0.35;
+  }
+
   .auth-bg-glow-a {
     top: -14%;
     left: -10%;

@@ -15,6 +15,7 @@ describe("pages", () => {
     expect(html).toContain('data-tz="Asia/Kuala_Lumpur"');
     expect(html).toContain("Kuala Lumpur");
     expect(html).toContain("auth-bg-glow");
+    expect(html).toContain("auth-globe");
   });
 
   it("serves the marketing page to anonymous visitors", async () => {
@@ -149,6 +150,9 @@ describe("pages", () => {
     // The embedded script must keep the </script> escape intact, otherwise the
     // inline script terminates early and the dashboard JS dies on the page.
     expect(html).toContain("<\\/script>");
+    // Regex escapes inside the template literal must survive too, or the
+    // emitted script gets a broken `replace(/^//, "")` that fails to parse.
+    expect(html).toContain('path.replace(/^\\//, "")');
   });
 
   it("renders the search box wired to the event type cards", async () => {

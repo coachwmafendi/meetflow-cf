@@ -23,13 +23,24 @@ function passwordField(options: { hint?: string; attrsHtml?: string } = {}): str
 }
 
 const WORLD_CLOCKS: Array<{ tz: string; city: string; pos: string }> = [
-  { tz: "Asia/Kuala_Lumpur", city: "Kuala Lumpur", pos: "top-[16%] left-[8%]" },
-  { tz: "Europe/London", city: "London", pos: "top-[26%] right-[9%]" },
-  { tz: "America/New_York", city: "New York", pos: "top-[52%] left-[11%]" },
-  { tz: "Asia/Tokyo", city: "Tokyo", pos: "bottom-[26%] right-[13%]" },
-  { tz: "Australia/Sydney", city: "Sydney", pos: "bottom-[14%] left-[15%]" },
-  { tz: "America/Los_Angeles", city: "San Francisco", pos: "top-[68%] right-[6%]" },
+  { tz: "America/Los_Angeles", city: "San Francisco", pos: "top-[26%] left-[8%]" },
+  { tz: "America/New_York", city: "New York", pos: "top-[47%] left-[8%]" },
+  { tz: "Europe/London", city: "London", pos: "top-[68%] left-[8%]" },
+  { tz: "Asia/Tokyo", city: "Tokyo", pos: "top-[26%] right-[8%]" },
+  { tz: "Asia/Kuala_Lumpur", city: "Kuala Lumpur", pos: "top-[47%] right-[8%]" },
+  { tz: "Australia/Sydney", city: "Sydney", pos: "top-[68%] right-[8%]" },
 ];
+
+const worldGlobe = `
+  <svg viewBox="0 0 100 100" fill="none" aria-hidden="true" class="auth-globe">
+    <circle cx="50" cy="50" r="49" />
+    <ellipse cx="50" cy="50" rx="49" ry="16.33" />
+    <ellipse cx="50" cy="50" rx="49" ry="32.67" />
+    <ellipse cx="50" cy="50" rx="16.33" ry="49" />
+    <ellipse cx="50" cy="50" rx="32.67" ry="49" />
+    <line x1="1" y1="50" x2="99" y2="50" />
+    <line x1="50" y1="1" x2="50" y2="99" />
+  </svg>`;
 
 const worldClocks = WORLD_CLOCKS.map(
   (c) => `<div class="auth-clock ${c.pos}" data-tz="${c.tz}">
@@ -80,6 +91,7 @@ function authShell(options: {
         <div class="auth-bg-glow auth-bg-glow-a"></div>
         <div class="auth-bg-glow auth-bg-glow-b"></div>
         <div class="auth-bg-glow auth-bg-glow-c"></div>
+        ${worldGlobe}
         ${worldClocks}
       </div>
       <div class="relative z-10 mx-auto w-full max-w-[22rem] py-6 sm:py-10">
