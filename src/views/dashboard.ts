@@ -324,13 +324,42 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
       const path = `/${user.slug}/${e.slug}`;
       return `<article class="ui-card ui-rise group flex items-center justify-between gap-4 p-4 sm:p-5
                      transition-shadow duration-200 hover:shadow-md"
-               :class="open ? 'z-30' : ''" x-data="{ open: false }" @click.outside="open = false"
+               :class="open ? 'z-30' : ''"
+               x-data="{
+          open: false,
+          active: ${e.is_active ? "true" : "false"},
+          busy: false,
+          msg: '',
+          name: ${escapeHtml(JSON.stringify(e.name))},
+          async toggle() {
+            if (this.busy) return;
+            this.busy = true;
+            try {
+              var res = await fetch('/dashboard/event-types/${e.id}/toggle', {
+                method: 'POST',
+                headers: { accept: 'application/json' },
+              });
+              if (res.ok) {
+                var data = await res.json();
+                this.active = data.is_active === 1;
+                this.msg = this.active ? 'Activated' : 'Deactivated';
+                var self = this;
+                clearTimeout(this._t);
+                this._t = setTimeout(function () { self.msg = ''; }, 2200);
+              }
+            } finally {
+              this.busy = false;
+            }
+          }
+        }"
+               @click.outside="open = false"
                x-show="matches(items[${i}])"
                style="animation-delay:${Math.min(i, 8) * 32}ms">
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
             <h3 class="truncate text-sm font-semibold text-ink">${escapeHtml(e.name)}</h3>
-            ${e.is_active ? "" : badge("neutral", "Inactive", false)}
+            <span class="ui-badge" :class="active ? 'ui-badge-success' : 'ui-badge-neutral'"
+                  x-text="active ? 'Active' : 'Inactive'">Active</span>
           </div>
           <p class="mt-1 flex items-center gap-1.5 text-[0.8125rem] text-muted">
             ${icon("clock", "size-3.5")}
@@ -346,11 +375,18 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
           <p class="mt-2.5 truncate font-mono text-[0.75rem] text-muted">${escapeHtml(path)}</p>
         </div>
         <div class="relative flex shrink-0 items-center gap-2">
-          <form method="post" action="/dashboard/event-types/${e.id}/toggle" class="shrink-0">
+          <span x-cloak x-show="msg" x-transition.opacity.duration.150ms
+                class="pointer-events-none absolute -top-9 left-0 z-20 whitespace-nowrap rounded-full border px-2 py-0.5 text-[0.75rem] font-medium"
+                :class="active ? 'border-success/20 bg-success-soft text-success' : 'border-line bg-subtle text-muted'"
+                x-text="msg"></span>
+          <form method="post" action="/dashboard/event-types/${e.id}/toggle" class="shrink-0"
+                @submit.prevent="toggle()">
             <button type="submit" class="ui-switch" role="switch"
                     aria-checked="${e.is_active ? "true" : "false"}"
-                    aria-label="${e.is_active ? "Deactivate" : "Activate"} ${escapeHtml(e.name)}"
-                    title="${e.is_active ? "Deactivate — hide from your public page" : "Activate — publish to your public page"}">
+                    :aria-checked="active ? 'true' : 'false'"
+                    :aria-label="(active ? 'Deactivate ' : 'Activate ') + name"
+                    :title="active ? 'Deactivate — hide from your public page' : 'Activate — publish to your public page'"
+                    :disabled="busy" :class="busy ? 'opacity-50' : ''">
               <span class="ui-switch-knob"></span>
             </button>
           </form>

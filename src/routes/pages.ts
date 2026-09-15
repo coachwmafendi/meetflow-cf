@@ -305,6 +305,7 @@ dashboard.post("/event-types/:id/toggle", async (c) => {
   const current = await getEventTypeOwned(c.env.DB, id, user.id);
   if (!current) return notFound();
 
+  const nextActive = current.is_active === 1 ? 0 : 1;
   await updateEventType(c.env.DB, id, user.id, {
     name: current.name,
     slug: current.slug,
@@ -313,9 +314,14 @@ dashboard.post("/event-types/:id/toggle", async (c) => {
     bufferMinutes: current.buffer_minutes,
     locationType: current.location_type,
     locationValue: current.location_value,
-    isActive: current.is_active === 1 ? 0 : 1,
+    isActive: nextActive,
     now: nowIso(),
   });
+  // The card switch on the list page toggles in place via fetch; the no-JS
+  // fallback keeps the redirect + toast flow.
+  if ((c.req.header("accept") ?? "").includes("application/json")) {
+    return c.json({ is_active: nextActive });
+  }
   return toastRedirect(
     c,
     `/dashboard/event-types/${id}`,

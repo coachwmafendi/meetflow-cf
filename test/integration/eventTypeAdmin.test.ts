@@ -114,6 +114,19 @@ describe("event type editing", () => {
     expect(await detail.json()).toMatchObject({ eventType: { is_active: 1 } });
   });
 
+  it("returns JSON for the card switch's in-place toggle", async () => {
+    const host = await createHost("wan");
+    const id = await makeEventType(host.cookie);
+
+    const res = await SELF.fetch(`https://example.com/dashboard/event-types/${id}/toggle`, {
+      method: "POST",
+      headers: { accept: "application/json", cookie: host.cookie },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(await res.json()).toEqual({ is_active: 0 });
+  });
+
   it("hard-deletes an event type with no bookings", async () => {
     const host = await createHost("wan");
     const id = await makeEventType(host.cookie);
