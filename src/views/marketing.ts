@@ -141,12 +141,12 @@ const FEATURES: Array<{ icon: IconName; title: string; body: string }> = [
   {
     icon: "check",
     title: "Double-booking protection",
-    body: "Every booking is re-validated on the server the moment it is made. Two guests can never take one slot.",
+    body: "Every appointment is re-validated on the server the moment it is made. Two guests can never take one slot.",
   },
   {
     icon: "inbox",
     title: "Emails & reminders",
-    body: "Guests get confirmations and 24-hour reminders. You are notified of every new booking and cancellation.",
+    body: "Guests get confirmations and 24-hour reminders. You are notified of every new appointment and cancellation.",
   },
 ];
 
@@ -189,9 +189,9 @@ const TOUR: Array<{ id: string; icon: IconName; label: string; src: string; alt:
   {
     id: "bookings",
     icon: "calendar",
-    label: "Bookings",
+    label: "Appointments",
     src: "/images/bookings-desktop.png",
-    alt: "Bookings list",
+    alt: "Appointments list",
   },
 ];
 
@@ -285,7 +285,7 @@ export function marketingPage(): string {
             <p class="ui-eyebrow ui-rise">Scheduling for independent professionals</p>
             <h1 class="ui-rise mt-3 text-4xl font-semibold leading-[1.08] tracking-[-0.03em] text-ink sm:text-5xl"
                 style="animation-delay:60ms">
-              Take bookings, not back-and-forth.
+              Take appointments, not back-and-forth.
             </h1>
             <p class="ui-rise mt-4 max-w-lg text-base leading-relaxed text-body" style="animation-delay:120ms">
               MeetFlow turns your availability into a shareable booking page. Guests pick a time
@@ -333,7 +333,7 @@ export function marketingPage(): string {
             Everything you need to get booked.
           </h2>
           <p class="mt-3 text-body">
-            A complete booking flow — public pages, weekly availability, buffers, timezones and
+            A complete appointment flow — public pages, weekly availability, buffers, timezones and
             double-booking protection — without the enterprise clutter.
           </p>
         </div>

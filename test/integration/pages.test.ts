@@ -32,7 +32,7 @@ describe("pages", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
     const html = await res.text();
-    expect(html).toContain("Take bookings");
+    expect(html).toContain("Take appointments");
     expect(html).toContain("/register");
     expect(html).not.toContain("/vendor/alpine.min.js");
   });
@@ -80,7 +80,7 @@ describe("pages", () => {
     const res = await SELF.fetch("https://example.com/wan/consultation");
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("Confirm booking");
+    expect(html).toContain("Confirm appointment");
     expect(html).toContain('id="page-data"');
     expect(html).toContain("ui-day");
     expect(html).toContain("data-timezone");

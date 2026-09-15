@@ -58,7 +58,7 @@ describe("guestConfirmation", () => {
   it("ships both html and plain text", () => {
     const mail = guestConfirmation(ctx, "UTC");
     expect(mail.html).toContain("<!doctype html>");
-    expect(mail.text).toContain("Your booking is confirmed");
+    expect(mail.text).toContain("Your appointment is confirmed");
     expect(mail.text).not.toContain("<");
   });
 
@@ -72,8 +72,8 @@ describe("guestConfirmation", () => {
       { ...ctx, rescheduleUrl: "https://meetflow.example/booking/1/reschedule?token=abc" },
       "UTC",
     );
-    expect(mail.html).toContain("Reschedule this booking");
-    expect(mail.text).toContain("Reschedule this booking");
+    expect(mail.html).toContain("Reschedule this appointment");
+    expect(mail.text).toContain("Reschedule this appointment");
   });
 });
 
@@ -82,7 +82,7 @@ describe("hostNotification", () => {
     const mail = hostNotification(ctx, "Asia/Kuala_Lumpur");
     expect(mail.to).toBe("wan@example.com");
     expect(mail.replyTo).toBe("ahmad@example.com");
-    expect(mail.subject).toBe("New booking: Ahmad — Consultation");
+    expect(mail.subject).toBe("New appointment: Ahmad — Consultation");
     expect(mail.text).toContain("09:00–09:30 · Kuala Lumpur (GMT+8)");
     expect(mail.text).toContain("ahmad@example.com");
   });

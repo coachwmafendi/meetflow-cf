@@ -290,21 +290,21 @@ export function dashboardPage(
       <div class="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         ${statTile("Upcoming", stats.upcoming, "calendar")}
         ${statTile("Today", stats.today, "clock")}
-        ${statTile("Total bookings", stats.total, "inbox")}
+        ${statTile("Total appointments", stats.total, "inbox")}
         ${statTile("Active event types", stats.activeEventTypes, "layers")}
       </div>
 
       <section class="ui-card overflow-hidden">
         <div class="flex items-center justify-between border-b border-line px-5 py-3.5">
-          <h2 class="text-sm font-semibold text-ink">Upcoming bookings</h2>
-          ${button({ label: "All bookings", href: "/dashboard/bookings", variant: "ghost", size: "sm", iconAfter: "chevronRight" })}
+          <h2 class="text-sm font-semibold text-ink">Upcoming appointments</h2>
+          ${button({ label: "All appointments", href: "/dashboard/bookings", variant: "ghost", size: "sm", iconAfter: "chevronRight" })}
         </div>
         ${table({
           columns: [{ label: "Guest" }, { label: "Event type" }, { label: "When" }],
           rowsHtml: rows,
           emptyHtml: emptyState({
             icon: "calendar",
-            title: "No upcoming bookings",
+            title: "No upcoming appointments",
             body: "Once someone books a slot on your public page it will show up here.",
             actionHtml: `<a class="ui-btn ui-btn-secondary ui-btn-sm" href="/${escapeHtml(user.slug)}"
                               target="_blank" rel="noopener">
@@ -421,7 +421,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
               </button>
             </form>
             <form method="post" action="/dashboard/event-types/${e.id}/delete"
-                  onsubmit="return confirm('Delete this event type? Event types with bookings are deactivated instead.')">
+                  onsubmit="return confirm('Delete this event type? Event types with appointments are deactivated instead.')">
               <button type="submit" class="ui-menu-item ui-menu-item-danger">
                 ${icon("x", "size-4")}<span>Delete</span>
               </button>
@@ -645,11 +645,11 @@ export function eventTypeEditPage(
     bookingCount > 0
       ? {
           label: "Deactivate permanently",
-          note: `${bookingCount} booking${bookingCount === 1 ? "" : "s"} reference this event type, so it is deactivated rather than deleted.`,
+          note: `${bookingCount} appointment${bookingCount === 1 ? "" : "s"} reference this event type, so it is deactivated rather than deleted.`,
         }
       : {
           label: "Delete event type",
-          note: "No bookings reference it, so it will be removed entirely.",
+          note: "No appointments reference it, so it will be removed entirely.",
         };
 
   return layout({
@@ -691,7 +691,7 @@ export function eventTypeEditPage(
             label: "Duration",
             type: "number",
             value: String(eventType.duration_minutes),
-            hint: "Minutes. Existing bookings keep their original length.",
+            hint: "Minutes. Existing appointments keep their original length.",
             attrsHtml: 'min="5" max="480" step="5"',
           })}
           ${field({
@@ -773,7 +773,7 @@ export function eventTypeEditPage(
               ${
                 active
                   ? "Guests can see and book this event type."
-                  : "Hidden from your public page. Existing bookings are unaffected."
+                  : "Hidden from your public page. Existing appointments are unaffected."
               }
             </p>
             <form method="post" action="/dashboard/event-types/${eventType.id}/toggle" class="mt-3">
@@ -958,11 +958,11 @@ export function bookingsPage(
   const emptyCopy: Record<string, string> = {
     upcoming: "Nothing on the calendar yet. Share your booking link to get started.",
     past: "Completed meetings will be listed here.",
-    cancelled: "Cancelled bookings are kept for your records — none so far.",
+    cancelled: "Cancelled appointments are kept for your records — none so far.",
   };
 
   return layout({
-    title: "Bookings",
+    title: "Appointments",
     nav: "host",
     activeNav: "/dashboard/bookings",
     hostName: user.name,
@@ -972,7 +972,7 @@ export function bookingsPage(
     body: `
       ${pageHeader({
         eyebrow: "Your calendar",
-        title: "Bookings",
+        title: "Appointments",
         subtitle: `Shown in ${zoneDisplay(user.timezone)}.`,
       })}
 
@@ -992,7 +992,7 @@ export function bookingsPage(
           rowsHtml: rows,
           emptyHtml: emptyState({
             icon: "inbox",
-            title: `No ${scope} bookings`,
+            title: `No ${scope} appointments`,
             body: emptyCopy[scope] ?? "Nothing here.",
           }),
         })}

@@ -137,7 +137,7 @@ const HOST_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: "grid" },
   { href: "/dashboard/event-types", label: "Event Types", icon: "layers" },
   { href: "/dashboard/availability", label: "Availability", icon: "clock" },
-  { href: "/dashboard/bookings", label: "Bookings", icon: "calendar" },
+  { href: "/dashboard/bookings", label: "Appointments", icon: "calendar" },
 ] as const;
 
 const WIDTHS = { sm: "max-w-md", md: "max-w-3xl", lg: "max-w-5xl", full: "" } as const;

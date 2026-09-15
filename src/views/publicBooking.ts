@@ -274,7 +274,7 @@ export function bookingPage(
                             placeholder="Anything useful to know beforehand?"></textarea>
                 </div>
                 <button class="ui-btn ui-btn-primary ui-btn-lg" type="submit" :disabled="submitting">
-                  <span x-text="submitting ? 'Booking…' : (reschedule ? 'Confirm new time' : 'Confirm booking')"></span>
+                  <span x-text="submitting ? 'Booking…' : (reschedule ? 'Confirm new time' : 'Confirm appointment')"></span>
                 </button>
               </form>
             </section>
@@ -327,7 +327,7 @@ export function bookingPage(
             <section class="p-5 sm:p-6" x-show="step === 'form'" x-cloak>
               <template x-if="selected">
                 <div>
-                  <p class="ui-eyebrow" x-text="reschedule ? 'New time' : 'Your booking'"></p>
+                  <p class="ui-eyebrow" x-text="reschedule ? 'New time' : 'Your appointment'"></p>
                   <p class="ui-time mt-2 text-base font-semibold text-ink" x-text="summary()"></p>
                   <p class="mt-1 text-[0.8125rem] text-muted" x-text="timezoneLabel"></p>
                 </div>
@@ -593,13 +593,13 @@ export function cancelConfirmPage(
   const when = formatBookingWhen(booking);
 
   return layout({
-    title: "Cancel booking",
+    title: "Cancel appointment",
     nav: "none",
     width: "md",
     body: `
       <div class="mx-auto max-w-md ui-rise">
         <div class="ui-card ui-card-pad">
-          <h1 class="text-lg font-semibold tracking-[-0.02em] text-ink">Cancel this booking?</h1>
+          <h1 class="text-lg font-semibold tracking-[-0.02em] text-ink">Cancel this appointment?</h1>
           <p class="mt-1.5 text-[0.8125rem] text-muted">
             This frees the slot for someone else. It cannot be undone — you would need to book again.
           </p>
@@ -615,7 +615,7 @@ export function cancelConfirmPage(
           <div class="mt-6 flex flex-wrap items-center gap-2">
             <form method="post" action="/booking/${booking.id}/cancel">
               <input type="hidden" name="token" value="${escapeHtml(token)}">
-              ${button({ label: "Cancel booking", variant: "danger" })}
+              ${button({ label: "Cancel appointment", variant: "danger" })}
             </form>
             ${button({
               label: "Keep it",
@@ -631,7 +631,7 @@ export function cancelConfirmPage(
 /** Terminal page after a guest cancels, and for an already-cancelled booking. */
 export function cancelledPage(host: PublicUser, eventType: EventTypeRow): string {
   return layout({
-    title: "Booking cancelled",
+    title: "Appointment cancelled",
     nav: "none",
     width: "md",
     body: `
@@ -640,7 +640,7 @@ export function cancelledPage(host: PublicUser, eventType: EventTypeRow): string
           <span class="mx-auto flex size-11 items-center justify-center rounded-full bg-subtle text-muted">
             ${icon("x", "size-5")}
           </span>
-          <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">Booking cancelled</h1>
+          <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">Appointment cancelled</h1>
           <p class="mt-1.5 text-[0.8125rem] text-muted">
             ${escapeHtml(eventType.name)} with ${escapeHtml(host.name)} has been cancelled.
             ${escapeHtml(host.name)} has been notified.
@@ -717,7 +717,7 @@ export function confirmationPage(
      </div>`;
 
   return layout({
-    title: "Booking confirmed",
+    title: "Appointment confirmed",
     nav: "none",
     width: "md",
     body: `
@@ -727,7 +727,7 @@ export function confirmationPage(
             <span class="flex size-11 items-center justify-center rounded-full bg-success-soft text-success">
               ${icon("check", "size-5")}
             </span>
-            <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">Booking confirmed</h1>
+            <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">Appointment confirmed</h1>
             <p class="mt-1 text-[0.8125rem] text-muted">
               ${escapeHtml(eventType.name)} with ${escapeHtml(host.name)}
             </p>
@@ -772,7 +772,7 @@ export function confirmationPage(
           }
           ${
             cancelHref
-              ? button({ label: "Cancel booking", href: cancelHref, variant: "ghost", size: "sm" })
+              ? button({ label: "Cancel appointment", href: cancelHref, variant: "ghost", size: "sm" })
               : ""
           }
         </div>

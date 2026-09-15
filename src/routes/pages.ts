@@ -47,6 +47,7 @@ import {
 } from "../services/booking";
 import { queueBookingCancelled, queueBookingCreated } from "../services/email";
 import { loginPage, registerPage } from "../views/auth";
+import { privacyPage, termsPage } from "../views/legal";
 import { marketingPage } from "../views/marketing";
 import {
   availabilityPage,
@@ -100,6 +101,10 @@ pageRoutes.get("/login", (c) => (c.get("user") ? c.redirect("/dashboard") : html
 pageRoutes.get("/register", (c) =>
   c.get("user") ? c.redirect("/dashboard") : html(registerPage()),
 );
+
+// Legal pages. Registered before the /:username catch-all so they own their URLs.
+pageRoutes.get("/privacy", (c) => html(privacyPage()));
+pageRoutes.get("/terms", (c) => html(termsPage()));
 
 /** Renders a throttled form submission as the page again, not as raw JSON. */
 function throttled(render: (error: string) => string) {
@@ -435,7 +440,7 @@ dashboard.post("/bookings/:id/cancel", async (c) => {
   } catch (err) {
     if (!(err instanceof BookingError)) throw err;
   }
-  return toastRedirect(c, "/dashboard/bookings", "Booking cancelled");
+  return toastRedirect(c, "/dashboard/bookings", "Appointment cancelled");
 });
 
 dashboard.get("/settings", async (c) => {
