@@ -14,7 +14,7 @@ import {
   time,
 } from "./ui";
 import type { BookingWithEvent, DashboardStats } from "../db/bookings";
-import type { AvailabilityRuleRow, EventTypeRow, PublicUser } from "../types";
+import type { AvailabilityRuleRow, BookingAttendeeRow, EventTypeRow, PublicUser } from "../types";
 import { utcToZonedParts } from "../lib/timezone";
 import { zoneDisplay } from "../lib/timezoneList";
 
@@ -938,6 +938,7 @@ export function bookingsPage(
   bookings: BookingWithEvent[],
   scope: "upcoming" | "past" | "cancelled",
   toast = "",
+  attendeesByBooking: Map<number, BookingAttendeeRow[]> = new Map(),
 ): string {
   const tab = (value: string, label: string) =>
     `<a href="/dashboard/bookings?scope=${value}" class="ui-nav-link ${
@@ -956,7 +957,33 @@ export function bookingsPage(
      <div class="text-[0.8125rem] text-muted">${escapeHtml(b.guest_email)}</div>
      ${
        b.seats_total > 1
-         ? `<p class="mt-1 text-[0.75rem] text-muted">Group — ${b.seats_taken} of ${b.seats_total} seats taken</p>`
+         ? `<p class="mt-1 text-[0.75rem] text-muted">Group — ${b.seats_taken} of ${b.seats_total} seats taken</p>
+            ${
+              (attendeesByBooking.get(b.id) ?? []).length > 0
+                ? `<details class="mt-1.5">
+                     <summary class="cursor-pointer text-[0.75rem] font-medium text-body hover:text-ink">
+                       Attendees &amp; tickets
+                     </summary>
+                     <ul class="mt-1.5 space-y-1">
+                       ${(attendeesByBooking.get(b.id) ?? [])
+                         .map(
+                           (a) => `<li class="text-[0.75rem] text-muted">
+                               <span class="text-body">${escapeHtml(a.guest_name)}</span>
+                               · <span class="font-mono tracking-[0.06em]">${escapeHtml(
+                                 a.ticket_code ?? "—",
+                               )}</span>
+                               · ${escapeHtml(a.guest_email)}${
+                                 a.status === "confirmed"
+                                   ? ""
+                                   : ' · <span class="text-muted">cancelled</span>'
+                               }
+                             </li>`,
+                         )
+                         .join("")}
+                     </ul>
+                   </details>`
+                : ""
+             }`
          : ""
      }
      ${

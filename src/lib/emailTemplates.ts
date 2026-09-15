@@ -49,6 +49,8 @@ export interface BookingEmailContext {
   /** Group events only: confirmed seats and capacity, for host-facing copy. */
   seatsTaken?: number;
   seatsTotal?: number;
+  /** Group events only: this guest's ticket code, shown as their ticket. */
+  ticketCode?: string;
 }
 
 /** "Monday, 14 September 2026 · 09:00–09:30 · Kuala Lumpur (GMT+8)" */
@@ -144,6 +146,7 @@ function baseRows(ctx: BookingEmailContext, timeZone: string): Array<[string, st
     ["Event", ctx.eventName],
     ["When", formatWhen(ctx.startAt, ctx.endAt, timeZone)],
     ["Duration", `${ctx.durationMinutes} minutes`],
+    ...(ctx.ticketCode ? ([["Ticket", ctx.ticketCode]] as Array<[string, string]>) : []),
   ];
 }
 

@@ -113,6 +113,7 @@ async function loadContext(
   let guestEmail = booking.guest_email;
   let guestNotes = booking.notes;
   let guestTimezone = booking.timezone;
+  let ticketCode: string | undefined;
   if ("attendeeId" in job && job.attendeeId) {
     const attendee = await getAttendeeById(env.DB, job.attendeeId);
     if (!attendee) return null;
@@ -121,6 +122,7 @@ async function loadContext(
     guestEmail = attendee.guest_email;
     guestNotes = attendee.notes;
     guestTimezone = attendee.timezone;
+    ticketCode = attendee.ticket_code ?? undefined;
   }
 
   const seatsTaken = isGroup ? await countConfirmedAttendees(env.DB, booking.id) : undefined;
@@ -139,6 +141,7 @@ async function loadContext(
       notes: guestNotes,
       appUrl: env.APP_URL,
       ...(isGroup ? { seatsTaken, seatsTotal: eventType.seats_total } : {}),
+      ticketCode,
       // Only guest-facing mail carries the link; the host cancels from the dashboard.
       cancelUrl:
         job.to === "guest" && job.kind !== "booking_cancelled"

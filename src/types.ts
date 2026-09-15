@@ -79,6 +79,8 @@ export interface BookingAttendeeRow {
   notes: string | null;
   timezone: string;
   status: AttendeeStatus;
+  /** Human-presentable ticket code (MF-XXXX-XXXX), null for legacy rows. */
+  ticket_code: string | null;
   created_at: string;
   updated_at: string;
 }

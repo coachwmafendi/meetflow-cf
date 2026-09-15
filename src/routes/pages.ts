@@ -54,6 +54,7 @@ import {
 import {
   countConfirmedAttendees,
   getAttendeeForBooking,
+  listAttendees,
 } from "../db/attendees";
 import {
   queueAttendeeCancelled,
@@ -82,7 +83,7 @@ import {
   profilePage,
   seatCancelledPage,
 } from "../views/publicBooking";
-import type { AppEnv, EventTypeRow } from "../types";
+import type { AppEnv, BookingAttendeeRow, EventTypeRow } from "../types";
 
 export const pageRoutes = new Hono<AppEnv>();
 
@@ -465,7 +466,17 @@ dashboard.get("/bookings", async (c) => {
   const raw = c.req.query("scope") ?? "upcoming";
   const scope = raw === "past" || raw === "cancelled" ? raw : "upcoming";
   const bookings = await listBookings(c.env.DB, user.id, scope, nowIso());
-  return html(bookingsPage(user, bookings, scope, readToast(c)));
+
+  // Group slots list their seats (with ticket codes) inline for door checks.
+  const attendeesByBooking = new Map<number, BookingAttendeeRow[]>();
+  await Promise.all(
+    bookings
+      .filter((b) => b.seats_total > 1)
+      .map(async (b) => {
+        attendeesByBooking.set(b.id, await listAttendees(c.env.DB, b.id));
+      }),
+  );
+  return html(bookingsPage(user, bookings, scope, readToast(c), attendeesByBooking));
 });
 
 dashboard.post("/bookings/:id/cancel", async (c) => {
@@ -688,7 +699,9 @@ pageRoutes.get("/booking/:id/confirmed", async (c) => {
   if (eventType.seats_total > 1) {
     // Group events are managed per seat, never with booking-level links.
     const attendeeParam = Number(c.req.query("attendee"));
-    let seat: { guestEmail?: string; seatsTaken: number; cancelHref?: string } | undefined;
+    let seat:
+      | { guestEmail?: string; seatsTaken: number; cancelHref?: string; ticketCode?: string }
+      | undefined;
     const seatsTaken = await countConfirmedAttendees(c.env.DB, booking.id);
     if (Number.isInteger(attendeeParam) && attendeeParam > 0) {
       const attendee = await getAttendeeForBooking(c.env.DB, attendeeParam, booking.id);
@@ -697,6 +710,7 @@ pageRoutes.get("/booking/:id/confirmed", async (c) => {
           guestEmail: attendee.guest_email,
           seatsTaken,
           cancelHref: await attendeeCancelPath(booking.id, attendeeParam, c.env.SESSION_SECRET),
+          ticketCode: attendee.ticket_code ?? undefined,
         };
       }
     }

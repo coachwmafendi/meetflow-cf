@@ -803,7 +803,12 @@ export function confirmationPage(
   cancelHref?: string,
   rescheduleHref?: string,
   /** Group events only: the viewing guest's seat, when known. */
-  seat?: { guestEmail?: string; seatsTaken: number; cancelHref?: string },
+  seat?: {
+    guestEmail?: string;
+    seatsTaken: number;
+    cancelHref?: string;
+    ticketCode?: string;
+  },
 ): string {
   const p = utcToZonedParts(new Date(booking.start_at), booking.timezone);
   const end = utcToZonedParts(new Date(booking.end_at), booking.timezone);
@@ -843,6 +848,16 @@ export function confirmationPage(
             ${
               eventType.seats_total > 1 && seat
                 ? row("Seats", `${seat.seatsTaken} of ${eventType.seats_total} taken`)
+                : ""
+            }
+            ${
+              seat?.ticketCode
+                ? row(
+                    "Ticket",
+                    `<span class="font-mono text-sm font-semibold tracking-[0.08em] text-ink">${escapeHtml(
+                      seat.ticketCode,
+                    )}</span>`,
+                  )
                 : ""
             }
             ${

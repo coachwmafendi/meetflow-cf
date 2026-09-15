@@ -50,8 +50,9 @@ describe("seats", () => {
     const first = await book(MONDAY, "Ahmad", "ahmad@example.com");
     expect(first.res.status).toBe(201);
     const booking = first.body.booking as { id: number };
-    const firstAttendee = first.body.attendee as { id: number };
+    const firstAttendee = first.body.attendee as { id: number; ticket_code: string };
     expect(firstAttendee.id).toBeGreaterThan(0);
+    expect(firstAttendee.ticket_code).toMatch(/^MF-[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}$/);
 
     const second = await book(MONDAY, "Bella", "bella@example.com");
     expect(second.res.status).toBe(201);
@@ -171,6 +172,8 @@ describe("seats", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("2 of 3 taken");
+    expect(html).toContain("Ticket");
+    expect(html).toContain((first.body.attendee as { ticket_code: string }).ticket_code);
     expect(html).toContain("Cancel my seat");
     expect(html).not.toContain("Reschedule");
 
@@ -200,6 +203,25 @@ describe("seats", () => {
       .bind(bookingId)
       .all<{ status: string }>();
     expect(rows.results.map((r) => r.status)).toEqual(["cancelled", "cancelled"]);
+
+    // The cancelled booking now lives in the cancelled scope.
+    const list = await SELF_fetch("/dashboard/bookings?scope=cancelled", {
+      headers: { cookie: host.cookie },
+    });
+    const listHtml = await list.text();
+    expect(listHtml).toContain("Attendees &amp; tickets");
+  });
+
+  it("lists attendees with ticket codes on the dashboard", async () => {
+    const host = await seedGroupEvent(3);
+    await book(MONDAY, "Ahmad", "ahmad@example.com");
+    const res = await SELF_fetch("/dashboard/bookings", {
+      headers: { cookie: host.cookie },
+    });
+    const html = await res.text();
+    expect(html).toContain("Attendees &amp; tickets");
+    expect(html).toMatch(/MF-[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}/);
+    expect(html).toContain("ahmad@example.com");
   });
 
   it("keeps private events working exactly as before (no attendee rows)", async () => {
