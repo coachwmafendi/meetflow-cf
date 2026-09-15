@@ -59,7 +59,9 @@ function stubFetch(responses: Array<{ status: number; body: unknown }>) {
 }
 
 const FREEBUSY_BODY = {
-  calendars: { "wan@gmail.com": { busy: [{ start: "2026-09-21T01:00:00Z", end: "2026-09-21T02:00:00Z" }] } },
+  calendars: {
+    "wan@gmail.com": { busy: [{ start: "2026-09-21T01:00:00Z", end: "2026-09-21T02:00:00Z" }] },
+  },
 };
 
 describe("getGoogleBusy", () => {
@@ -121,7 +123,10 @@ describe("getGoogleBusy", () => {
 describe("exchangeGoogleCode", () => {
   it("posts the authorization code with the matching redirect_uri", async () => {
     const { impl, calls } = stubFetch([
-      { status: 200, body: { access_token: "a", refresh_token: "r", id_token: "x.y.z", expires_in: 3600 } },
+      {
+        status: 200,
+        body: { access_token: "a", refresh_token: "r", id_token: "x.y.z", expires_in: 3600 },
+      },
     ]);
     const tokens = await exchangeGoogleCode(env, "auth-code", impl);
     expect(tokens.refresh_token).toBe("r");

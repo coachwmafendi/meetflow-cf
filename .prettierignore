@@ -15,3 +15,7 @@ docs/superpowers/plans/
 
 # Vendored font binaries.
 public/fonts/
+
+# Local browser-automation artifacts (screenshots, snapshots).
+.playwright-mcp/
+*.png

@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { listPublicEventTypes } from "../db/eventTypes";
 import { findUserBySlug } from "../db/users";
 import { isYmd } from "../lib/validate";
+import { zonedToUtc } from "../lib/timezone";
+import { fetchGoogleBusyClosure, getGoogleBusy } from "../lib/googleCalendar";
 import { LIMITS, rateLimit } from "../middleware/rateLimit";
 import { getMonthFreeDays, getSlotsForDate } from "../services/availability";
 import { BookingError, createBooking, resolvePublicTarget } from "../services/booking";
@@ -9,6 +11,8 @@ import { queueBookingCreated } from "../services/email";
 import type { AppEnv } from "../types";
 
 export const publicRoutes = new Hono<AppEnv>();
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
 
 publicRoutes.get("/:username", async (c) => {
   const host = await findUserBySlug(c.env.DB, c.req.param("username").toLowerCase());
@@ -41,6 +45,14 @@ publicRoutes.get("/:username/:eventSlug/slots", async (c) => {
       c.req.param("username"),
       c.req.param("eventSlug"),
     );
+    const dayStart = zonedToUtc(date, "00:00", host.timezone);
+    const extraBusy = await getGoogleBusy(
+      c.env.DB,
+      c.env,
+      host.id,
+      dayStart.getTime() - 3_600_000,
+      dayStart.getTime() + 25 * 3_600_000,
+    );
     const slots = await getSlotsForDate(c.env.DB, {
       hostId: host.id,
       hostTimezone: host.timezone,
@@ -49,6 +61,7 @@ publicRoutes.get("/:username/:eventSlug/slots", async (c) => {
       bufferMinutes: eventType.buffer_minutes,
       dateYmd: date,
       nowMs: Date.now(),
+      extraBusy,
     });
     return c.json({
       hostTimezone: host.timezone,
@@ -77,6 +90,14 @@ publicRoutes.get("/:username/:eventSlug/month", async (c) => {
       c.req.param("username"),
       c.req.param("eventSlug"),
     );
+    const monthStart = zonedToUtc(`${year}-${pad2(month)}-01`, "00:00", host.timezone);
+    const extraBusy = await getGoogleBusy(
+      c.env.DB,
+      c.env,
+      host.id,
+      monthStart.getTime() - 24 * 3_600_000,
+      monthStart.getTime() + 32 * 24 * 3_600_000,
+    );
     const days = await getMonthFreeDays(c.env.DB, {
       hostId: host.id,
       hostTimezone: host.timezone,
@@ -86,6 +107,7 @@ publicRoutes.get("/:username/:eventSlug/month", async (c) => {
       year,
       month,
       nowMs: Date.now(),
+      extraBusy,
     });
     return c.json({ days });
   } catch (err) {
@@ -107,6 +129,7 @@ publicRoutes.post("/:username/:eventSlug/book", rateLimit(LIMITS.book), async (c
       guestEmail: String(body.guest_email ?? ""),
       guestTimezone: String(body.timezone ?? "UTC"),
       notes: body.notes ? String(body.notes) : null,
+      fetchGoogleBusy: fetchGoogleBusyClosure(c.env.DB, c.env),
     });
     // Off the critical path: the guest gets their confirmation page regardless.
     c.executionCtx.waitUntil(queueBookingCreated(c.env, booking.id));

@@ -54,7 +54,11 @@ export async function verifyOauthState(state: string, secret: string): Promise<n
   return Number.isInteger(userId) && userId > 0 ? userId : null;
 }
 
-export async function googleAuthUrl(env: SecretEnv, userId: number, secret: string): Promise<string> {
+export async function googleAuthUrl(
+  env: SecretEnv,
+  userId: number,
+  secret: string,
+): Promise<string> {
   const params = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID!,
     redirect_uri: `${env.APP_URL}/oauth/google/callback`,
@@ -201,7 +205,13 @@ export async function getGoogleBusy(
     const row = await getGoogleConnection(db, userId);
     if (!row) return [];
     const accessToken = await ensureAccessToken(db, env, row, fetchImpl);
-    const busy = await fetchFreeBusy(fetchImpl, accessToken, row.google_email, timeMinMs, timeMaxMs);
+    const busy = await fetchFreeBusy(
+      fetchImpl,
+      accessToken,
+      row.google_email,
+      timeMinMs,
+      timeMaxMs,
+    );
     cache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, busy });
     return busy;
   } catch (err) {
@@ -212,6 +222,5 @@ export async function getGoogleBusy(
 
 /** Closure the booking service calls with a candidate day window. */
 export function fetchGoogleBusyClosure(db: D1Database, env: SecretEnv): FetchGoogleBusy {
-  return (userId, timeMinMs, timeMaxMs) =>
-    getGoogleBusy(db, env, userId, timeMinMs, timeMaxMs);
+  return (userId, timeMinMs, timeMaxMs) => getGoogleBusy(db, env, userId, timeMinMs, timeMaxMs);
 }

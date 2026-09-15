@@ -17,6 +17,7 @@ import { findUserById, findUserBySlug, setAvatarKey, updateUserSettings } from "
 import { listSavedLocations } from "../db/savedLocations";
 import { ImageError, avatarKey, validateAvatar } from "../lib/image";
 import { cancelPath, reschedulePath } from "../lib/cancelToken";
+import { fetchGoogleBusyClosure } from "../lib/googleCalendar";
 import { toMinutes } from "../lib/slots";
 import { isoUtc, nowIso } from "../lib/time";
 import { isValidTimeZone, zonedDateString, zonedToUtc } from "../lib/timezone";
@@ -573,6 +574,7 @@ pageRoutes.post("/booking/:id/reschedule", rateLimit(LIMITS.guestCancel), async 
       secret: c.env.SESSION_SECRET,
       newStartAt: String(body.start_at ?? ""),
       guestTimezone: String(body.timezone ?? "UTC"),
+      fetchGoogleBusy: fetchGoogleBusyClosure(c.env.DB, c.env),
     });
     c.executionCtx.waitUntil(queueBookingCreated(c.env, result.booking.id));
     return c.json({ booking: result.booking }, 201);

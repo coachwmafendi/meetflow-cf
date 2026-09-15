@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { api, createHost, resetDb } from "../helpers";
 import { insertBookingIfFree } from "../../src/db/bookings";
+import { createBooking } from "../../src/services/booking";
 
 async function seed() {
   const host = await createHost("wan", "Asia/Kuala_Lumpur");
@@ -235,5 +236,62 @@ describe("insertBookingIfFree buffer guard", () => {
       bufferMinutes: 15,
     });
     expect(otherType).not.toBeNull();
+  });
+});
+
+describe("google busy (service level)", () => {
+  beforeEach(resetDb);
+
+  async function seedWide() {
+    const host = await createHost("wan");
+    await api("/api/availability", {
+      method: "PUT",
+      cookie: host.cookie,
+      body: JSON.stringify({ rules: [{ day_of_week: 1, start_time: "09:00", end_time: "17:00" }] }),
+    });
+    await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 30 }),
+    });
+    return host;
+  }
+
+  it("rejects a booking inside a Google-busy interval even though the grid is free", async () => {
+    await seedWide();
+
+    await expect(
+      createBooking(env.DB, {
+        hostSlug: "wan",
+        eventSlug: "consultation",
+        startAt: "2026-09-21T05:00:00Z",
+        guestName: "Ahmad",
+        guestEmail: "ahmad@example.com",
+        guestTimezone: "Asia/Kuala_Lumpur",
+        notes: null,
+        fetchGoogleBusy: async () => [
+          {
+            startMs: Date.parse("2026-09-21T05:00:00Z"),
+            endMs: Date.parse("2026-09-21T06:00:00Z"),
+          },
+        ],
+      }),
+    ).rejects.toThrow("no longer available");
+  });
+
+  it("still books when fetchGoogleBusy returns nothing", async () => {
+    await seedWide();
+
+    const booking = await createBooking(env.DB, {
+      hostSlug: "wan",
+      eventSlug: "consultation",
+      startAt: "2026-09-21T05:00:00Z",
+      guestName: "Ahmad",
+      guestEmail: "ahmad@example.com",
+      guestTimezone: "Asia/Kuala_Lumpur",
+      notes: null,
+      fetchGoogleBusy: async () => [],
+    });
+    expect(booking.status).toBe("confirmed");
   });
 });

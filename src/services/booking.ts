@@ -9,7 +9,8 @@ import {
 } from "../db/bookings";
 import { findUserById, findUserBySlug } from "../db/users";
 import { addMinutes, isoUtc, nowIso, parseIsoUtc } from "../lib/time";
-import { isValidTimeZone, zonedDateString } from "../lib/timezone";
+import { isValidTimeZone, zonedDateString, zonedToUtc } from "../lib/timezone";
+import type { FetchGoogleBusy } from "../lib/googleCalendar";
 import { isEmail, isYmd } from "../lib/validate";
 import { verifyCancelToken } from "../lib/cancelToken";
 import { getDaySlots } from "./availability";
@@ -51,6 +52,11 @@ export interface CreateBookingInput {
   guestTimezone: string;
   notes: string | null;
   nowMs?: number;
+  /**
+   * Fetches Google busy intervals for `userId` over `timeMinMs..timeMaxMs`.
+   * Absent (or a route without the feature) = no Google busy check.
+   */
+  fetchGoogleBusy?: FetchGoogleBusy;
 }
 
 export async function createBooking(
@@ -86,6 +92,17 @@ export async function createBooking(
   const hostDate = zonedDateString(start, host.timezone);
   if (!isYmd(hostDate)) throw new BookingError("Invalid start time", 400);
 
+  // A Google-busy slot can never be booked even if the page was stale.
+  const dayStart = zonedToUtc(hostDate, "00:00", host.timezone);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
+  const extraBusy = input.fetchGoogleBusy
+    ? await input.fetchGoogleBusy(
+        host.id,
+        dayStart.getTime() - 3_600_000,
+        dayEnd.getTime() + 3_600_000,
+      )
+    : [];
+
   const { grid, free } = await getDaySlots(db, {
     hostId: host.id,
     hostTimezone: host.timezone,
@@ -94,6 +111,7 @@ export async function createBooking(
     bufferMinutes: eventType.buffer_minutes,
     dateYmd: hostDate,
     nowMs,
+    extraBusy,
   });
   // Off the grid entirely (outside availability, or not on a duration boundary).
   if (!grid.some((s) => s.startAt === startIso)) {
@@ -127,6 +145,11 @@ export interface RescheduleInput {
   newStartAt: string;
   guestTimezone: string;
   nowMs?: number;
+  /**
+   * Fetches Google busy intervals for `userId` over `timeMinMs..timeMaxMs`.
+   * Absent (or a route without the feature) = no Google busy check.
+   */
+  fetchGoogleBusy?: FetchGoogleBusy;
 }
 
 /**
@@ -166,6 +189,17 @@ export async function rescheduleBooking(
   const hostDate = zonedDateString(start, host.timezone);
   if (!isYmd(hostDate)) throw new BookingError("Invalid start time", 400);
 
+  // A Google-busy slot can never be rescheduled into even if the page was stale.
+  const dayStart = zonedToUtc(hostDate, "00:00", host.timezone);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
+  const extraBusy = input.fetchGoogleBusy
+    ? await input.fetchGoogleBusy(
+        host.id,
+        dayStart.getTime() - 3_600_000,
+        dayEnd.getTime() + 3_600_000,
+      )
+    : [];
+
   const { grid, free } = await getDaySlots(db, {
     hostId: host.id,
     hostTimezone: host.timezone,
@@ -174,6 +208,7 @@ export async function rescheduleBooking(
     bufferMinutes: eventType.buffer_minutes,
     dateYmd: hostDate,
     nowMs,
+    extraBusy,
   });
   if (!grid.some((s) => s.startAt === startIso)) {
     throw new BookingError("That time is not available", 422);

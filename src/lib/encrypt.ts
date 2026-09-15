@@ -22,10 +22,7 @@ async function importKey(keyBase64: string): Promise<CryptoKey> {
   if (raw.byteLength !== KEY_BYTES) {
     throw new Error("GOOGLE_TOKEN_KEY must be base64 of 32 bytes");
   }
-  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, [
-    "encrypt",
-    "decrypt",
-  ]);
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 }
 
 export async function encryptToBase64(keyBase64: string, plaintext: string): Promise<string> {
