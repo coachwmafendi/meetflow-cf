@@ -218,7 +218,9 @@ describe("pages", () => {
     });
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).not.toContain('type="search"');
+    // The palette owns a type="search" input on every host page, so assert on
+    // the event-type box's placeholder rather than the input type.
+    expect(html).not.toContain("Search event types");
     expect(html).toContain("No event types yet");
   });
 
@@ -516,5 +518,18 @@ describe("pages", () => {
       headers: { cookie: host.cookie },
     });
     expect(await list.text()).not.toContain("/wan/consultation");
+  });
+
+  it("ships the command palette on host pages only", async () => {
+    const host = await createHost("wan");
+    const res = await SELF.fetch("https://example.com/dashboard", {
+      headers: { cookie: host.cookie },
+    });
+    const html = await res.text();
+    expect(html).toContain("meetflowPalette");
+    expect(html).toContain("open-palette");
+
+    const login = await SELF.fetch("https://example.com/login");
+    expect(await login.text()).not.toContain("meetflowPalette");
   });
 });
