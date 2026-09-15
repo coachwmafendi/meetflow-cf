@@ -35,6 +35,37 @@ const EMBED_SCRIPT = `
         return '<iframe src="' + url + '" width="100%" height="600" style="border:0" loading="lazy" title="Booking page"></iframe>';
       }
 
+      function popupSnippet(url, link) {
+        var scriptUrl = new URL("/embed.js", url).href;
+        return [
+          "<!-- MeetFlow element-click embed code begins -->",
+          "<script>",
+          "(function (d, s, u) {",
+          "  var js = d.createElement(s);",
+          "  js.src = u; js.async = true;",
+          "  d.getElementsByTagName(s)[0].parentNode.insertBefore(js, d.getElementsByTagName(s)[0]);",
+          '})(document, "script", "' + scriptUrl + '");',
+          "<\/script>",
+          "<!-- MeetFlow element-click embed code ends -->",
+          "",
+          "<!-- Add data-meetflow-link to any element; clicking it opens the popup. -->",
+          '<button data-meetflow-link="' + link + '">Book now</button>',
+        ].join("\n");
+      }
+
+      function activateTab(dialog, name) {
+        var tabs = dialog.querySelectorAll("[data-embed-tab]");
+        Array.prototype.forEach.call(tabs, function (btn) {
+          var active = btn.getAttribute("data-embed-tab") === name;
+          btn.classList.toggle("ui-embed-tab-active", active);
+          btn.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        var codes = dialog.querySelectorAll("[data-embed-code]");
+        Array.prototype.forEach.call(codes, function (code) {
+          code.hidden = code.getAttribute("data-embed-code-tab") !== name;
+        });
+      }
+
       window.createEventTypeForm = function () {
         return {
           name: '',
@@ -135,10 +166,20 @@ const EMBED_SCRIPT = `
         if (openBtn) {
           var dialog = document.getElementById(openBtn.getAttribute("data-embed-open"));
           if (!dialog) return;
-          var url = new URL(openBtn.getAttribute("data-path"), window.location.origin).href;
-          var code = dialog.querySelector("[data-embed-code]");
-          if (code) code.value = snippet(url);
+          var path = openBtn.getAttribute("data-path");
+          var url = new URL(path, window.location.origin).href;
+          var inlineCode = dialog.querySelector('[data-embed-code-tab="inline"]');
+          var popupCode = dialog.querySelector('[data-embed-code-tab="popup"]');
+          if (inlineCode) inlineCode.value = snippet(url);
+          if (popupCode) popupCode.value = popupSnippet(url, path.replace(/^\//, ""));
+          activateTab(dialog, "inline");
           dialog.showModal();
+          return;
+        }
+
+        var tabBtn = event.target.closest("[data-embed-tab]");
+        if (tabBtn) {
+          activateTab(tabBtn.closest("dialog"), tabBtn.getAttribute("data-embed-tab"));
           return;
         }
 
@@ -151,7 +192,7 @@ const EMBED_SCRIPT = `
         var copyBtn = event.target.closest("[data-embed-copy]");
         if (copyBtn) {
           var dialog = copyBtn.closest("dialog");
-          var code = dialog.querySelector("[data-embed-code]");
+          var code = dialog.querySelector("[data-embed-code]:not([hidden])");
           var url = code ? code.value : "";
           if (!url) return;
 
@@ -366,8 +407,16 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
             <p class="mt-1 text-[0.8125rem] text-muted">
               Paste this snippet into your website where the booking page should appear.
             </p>
+            <div class="mt-3 flex gap-1 border-b border-line" role="tablist" aria-label="Embed type">
+              <button type="button" class="ui-embed-tab ui-embed-tab-active" role="tab"
+                      aria-selected="true" data-embed-tab="inline">Inline</button>
+              <button type="button" class="ui-embed-tab" role="tab" aria-selected="false"
+                      data-embed-tab="popup">Popup</button>
+            </div>
             <textarea class="ui-input mt-3 resize-none font-mono text-[0.75rem]" rows="4"
-                      readonly data-embed-code></textarea>
+                      readonly data-embed-code data-embed-code-tab="inline"></textarea>
+            <textarea class="ui-input mt-3 resize-none font-mono text-[0.75rem]" rows="8"
+                      readonly data-embed-code data-embed-code-tab="popup" hidden></textarea>
             <div class="mt-3 flex justify-end">
               <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-embed-copy>
                 ${icon("copy", "size-4")}<span>Copy code</span>
