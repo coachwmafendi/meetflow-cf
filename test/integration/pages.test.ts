@@ -2,6 +2,15 @@ import { SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createHost, resetDb } from "../helpers";
 
+/** Extracts the bodies of all inline (non-src) script blocks from HTML. */
+function inlineScripts(html: string): string[] {
+  const scripts: string[] = [];
+  const re = /<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(html)) !== null) scripts.push(match[1] ?? "");
+  return scripts;
+}
+
 describe("pages", () => {
   beforeEach(resetDb);
 
@@ -153,6 +162,27 @@ describe("pages", () => {
     // Regex escapes inside the template literal must survive too, or the
     // emitted script gets a broken `replace(/^//, "")` that fails to parse.
     expect(html).toContain('path.replace(/^\\//, "")');
+  });
+
+  it("serves syntactically valid inline scripts on the event types page", async () => {
+    const host = await createHost("wan");
+    await SELF.fetch("https://example.com/api/event-types", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: host.cookie },
+      body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 30 }),
+    });
+    const res = await SELF.fetch("https://example.com/dashboard/event-types", {
+      headers: { cookie: host.cookie },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    const scripts = inlineScripts(html);
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const script of scripts) {
+      // Cooking bugs in the embedded template literals (stray </script>,
+      // lost regex/string escapes) surface as syntax errors here.
+      expect(() => new Function(script)).not.toThrow();
+    }
   });
 
   it("renders the search box wired to the event type cards", async () => {

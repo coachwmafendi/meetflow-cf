@@ -50,7 +50,7 @@ const EMBED_SCRIPT = `
           "",
           "<!-- Add data-meetflow-link to any element; clicking it opens the popup. -->",
           '<button data-meetflow-link="' + link + '">Book now</button>',
-        ].join("\n");
+        ].join("\\n");
       }
 
       function activateTab(dialog, name) {
@@ -171,7 +171,7 @@ const EMBED_SCRIPT = `
           var inlineCode = dialog.querySelector('[data-embed-code-tab="inline"]');
           var popupCode = dialog.querySelector('[data-embed-code-tab="popup"]');
           if (inlineCode) inlineCode.value = snippet(url);
-          if (popupCode) popupCode.value = popupSnippet(url, path.replace(/^\//, ""));
+          if (popupCode) popupCode.value = popupSnippet(url, path.replace(/^\\//, ""));
           activateTab(dialog, "inline");
           dialog.showModal();
           return;
