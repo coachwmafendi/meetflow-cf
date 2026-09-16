@@ -35,8 +35,14 @@ export interface BookingEmailContext {
   hostName: string;
   hostEmail: string;
   hostSlug: string;
+  /** Booking row id — also the calendar invite UID. */
+  bookingId: number;
   eventName: string;
   durationMinutes: number;
+  /** Dates-only events: sessions run start → end, so Duration is omitted. */
+  datesOnly?: boolean;
+  /** Meet link / address / phone, when the host stated one. */
+  location?: string;
   /** Fixed-width UTC. */
   startAt: string;
   endAt: string;
@@ -145,7 +151,11 @@ function baseRows(ctx: BookingEmailContext, timeZone: string): Array<[string, st
   return [
     ["Event", ctx.eventName],
     ["When", formatWhen(ctx.startAt, ctx.endAt, timeZone)],
-    ["Duration", `${ctx.durationMinutes} minutes`],
+    // Dates-only sessions carry their length in the When span already.
+    ...(ctx.datesOnly
+      ? []
+      : ([["Duration", `${ctx.durationMinutes} minutes`]] as Array<[string, string]>)),
+    ...(ctx.location ? ([["Location", ctx.location]] as Array<[string, string]>) : []),
     ...(ctx.ticketCode ? ([["Ticket", ctx.ticketCode]] as Array<[string, string]>) : []),
   ];
 }
@@ -153,15 +163,15 @@ function baseRows(ctx: BookingEmailContext, timeZone: string): Array<[string, st
 /** Sent to the guest when their booking is created. */
 export function guestConfirmation(ctx: BookingEmailContext, guestTimeZone: string): EmailMessage {
   const { html, text } = render({
-    heading: "Your appointment is confirmed",
+    heading: "Your booking is confirmed",
     intro: `You are booked with ${ctx.hostName}.`,
     rows: [...baseRows(ctx, guestTimeZone), ["Host", ctx.hostName]],
     note: ctx.notes ? `Your note: ${ctx.notes}` : null,
     cta: ctx.cancelUrl
-      ? { label: "Cancel this appointment", href: ctx.cancelUrl }
+      ? { label: "Cancel this booking", href: ctx.cancelUrl }
       : { label: `Book again with ${ctx.hostName}`, href: `${ctx.appUrl}/${ctx.hostSlug}` },
     cta2: ctx.rescheduleUrl
-      ? { label: "Reschedule this appointment", href: ctx.rescheduleUrl }
+      ? { label: "Reschedule this booking", href: ctx.rescheduleUrl }
       : undefined,
     footer: ctx.cancelUrl
       ? "Cancelling is instant and frees the slot for someone else."
@@ -180,10 +190,9 @@ export function guestConfirmation(ctx: BookingEmailContext, guestTimeZone: strin
 
 /** Sent to the host when someone books them. */
 export function hostNotification(ctx: BookingEmailContext, hostTimeZone: string): EmailMessage {
-  const group =
-    ctx.seatsTotal !== undefined && ctx.seatsTotal > 1 && ctx.seatsTaken !== undefined;
+  const group = ctx.seatsTotal !== undefined && ctx.seatsTotal > 1 && ctx.seatsTaken !== undefined;
   const { html, text } = render({
-    heading: "New appointment",
+    heading: "New booking",
     intro: group
       ? `${ctx.guestName} joined ${ctx.eventName} (${ctx.seatsTaken} of ${ctx.seatsTotal} seats taken).`
       : `${ctx.guestName} booked ${ctx.eventName}.`,
@@ -201,8 +210,8 @@ export function hostNotification(ctx: BookingEmailContext, hostTimeZone: string)
   return {
     to: ctx.hostEmail,
     subject: group
-      ? `New appointment: ${ctx.guestName} — ${ctx.eventName} (${ctx.seatsTaken}/${ctx.seatsTotal} seats)`
-      : `New appointment: ${ctx.guestName} — ${ctx.eventName}`,
+      ? `New booking: ${ctx.guestName} — ${ctx.eventName} (${ctx.seatsTaken}/${ctx.seatsTotal} seats)`
+      : `New booking: ${ctx.guestName} — ${ctx.eventName}`,
     html,
     text,
     replyTo: ctx.guestEmail,
@@ -212,7 +221,7 @@ export function hostNotification(ctx: BookingEmailContext, hostTimeZone: string)
 /** Sent to the guest when the host cancels. */
 export function guestCancellation(ctx: BookingEmailContext, guestTimeZone: string): EmailMessage {
   const { html, text } = render({
-    heading: "Your appointment was cancelled",
+    heading: "Your booking was cancelled",
     intro: `${ctx.hostName} cancelled this meeting.`,
     rows: baseRows(ctx, guestTimeZone),
     cta: { label: "Pick another time", href: `${ctx.appUrl}/${ctx.hostSlug}` },
@@ -232,9 +241,9 @@ export function guestCancellation(ctx: BookingEmailContext, guestTimeZone: strin
 export function guestReminder(ctx: BookingEmailContext, guestTimeZone: string): EmailMessage {
   const { html, text } = render({
     heading: "Reminder: your meeting is tomorrow",
-    intro: `A reminder about your appointment with ${ctx.hostName}.`,
+    intro: `A reminder about your booking with ${ctx.hostName}.`,
     rows: [...baseRows(ctx, guestTimeZone), ["Host", ctx.hostName]],
-    ...(ctx.cancelUrl ? { cta: { label: "Cancel this appointment", href: ctx.cancelUrl } } : {}),
+    ...(ctx.cancelUrl ? { cta: { label: "Cancel this booking", href: ctx.cancelUrl } } : {}),
     footer: "See you then.",
   });
 
@@ -250,11 +259,11 @@ export function guestReminder(ctx: BookingEmailContext, guestTimeZone: string): 
 /** Sent to the host when the guest cancels through their signed link. */
 export function hostCancellation(ctx: BookingEmailContext, hostTimeZone: string): EmailMessage {
   const { html, text } = render({
-    heading: "Appointment cancelled",
+    heading: "Booking cancelled",
     intro: `${ctx.guestName} cancelled this meeting. The slot is free again.`,
     rows: [...baseRows(ctx, hostTimeZone), ["Guest", ctx.guestName], ["Email", ctx.guestEmail]],
     cta: { label: "Open dashboard", href: `${ctx.appUrl}/dashboard/bookings` },
-    footer: "You are receiving this because it was an appointment on your MeetFlow page.",
+    footer: "You are receiving this because it was an booking on your MeetFlow page.",
   });
 
   return {

@@ -74,7 +74,7 @@ describe("seats", () => {
     expect(first.res.status).toBe(201);
     const dup = await book(MONDAY, "Ahmad Again", "ahmad@example.com");
     expect(dup.res.status).toBe(409);
-    expect(dup.body.error).toBe("You have already booked this appointment.");
+    expect(dup.body.error).toBe("You have already booked this booking.");
   });
 
   it("reports seats_left on slots and keeps joinable slots listed", async () => {
@@ -209,7 +209,7 @@ describe("seats", () => {
       headers: { cookie: host.cookie },
     });
     const listHtml = await list.text();
-    expect(listHtml).toContain("Attendees &amp; tickets");
+    expect(listHtml).toContain("Ahmad +1 more");
   });
 
   it("lists attendees with ticket codes on the dashboard", async () => {
@@ -219,9 +219,29 @@ describe("seats", () => {
       headers: { cookie: host.cookie },
     });
     const html = await res.text();
-    expect(html).toContain("Attendees &amp; tickets");
+    expect(html).toContain("Ahmad · 1/3 seats · 0 in");
     expect(html).toMatch(/MF-[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}/);
     expect(html).toContain("ahmad@example.com");
+  });
+
+  it("renders the ticket session flow for group pages, calendar for private", async () => {
+    const host = await seedGroupEvent(3);
+    await api("/api/event-types", {
+      method: "POST",
+      cookie: host.cookie,
+      body: JSON.stringify({ name: "Consultation", slug: "consultation", duration_minutes: 30 }),
+    });
+
+    const groupHtml = await (await SELF_fetch("/wan/workshop")).text();
+    expect(groupHtml).toContain("Upcoming sessions");
+    expect(groupHtml).toContain("Get ticket");
+    expect(groupHtml).toContain("3 seats per session");
+    expect(groupHtml).not.toContain("grid-cols-7");
+
+    const privateHtml = await (await SELF_fetch("/wan/consultation")).text();
+    expect(privateHtml).toContain("Select a date");
+    expect(privateHtml).toContain("grid-cols-7");
+    expect(privateHtml).not.toContain("Upcoming sessions");
   });
 
   it("keeps private events working exactly as before (no attendee rows)", async () => {

@@ -66,94 +66,6 @@ const EMBED_SCRIPT = `
         });
       }
 
-      window.createEventTypeForm = function () {
-        return {
-          name: '',
-          slug: '',
-          duration: 30,
-          buffer: 0,
-          description: '',
-          locationType: 'none',
-          locationValue: '',
-          savedLink: '__new__',
-          savedLinks: [],
-          error: '',
-          submitting: false,
-
-          loadSaved() {
-            this.savedLinks = [];
-            this.savedLink = '__new__';
-            if (this.locationType !== 'google_meet' && this.locationType !== 'zoom') return;
-            var self = this;
-            fetch('/api/event-types/locations?type=' + this.locationType)
-              .then(function (res) { return res.ok ? res.json() : { locations: [] }; })
-              .then(function (body) {
-                self.savedLinks = body.locations || [];
-                if (self.savedLinks.length) self.savedLink = self.savedLinks[0];
-              })
-              .catch(function () {});
-          },
-
-          locationLabel() {
-            var labels = {
-              google_meet: 'Meeting link',
-              zoom: 'Meeting link',
-              in_person: 'Address',
-              phone: 'Phone number',
-            };
-            return labels[this.locationType] || 'Location';
-          },
-
-          locationPlaceholder() {
-            var placeholders = {
-              google_meet: 'https://meet.google.com/…',
-              zoom: 'https://zoom.us/j/…',
-              in_person: 'Office address',
-              phone: '+60 …',
-            };
-            return placeholders[this.locationType] || '';
-          },
-
-          locationValueToSend() {
-            if (this.locationType === 'google_meet' || this.locationType === 'zoom') {
-              return this.savedLink === '__new__' ? this.locationValue.trim() : this.savedLink;
-            }
-            return this.locationValue.trim();
-          },
-
-          async submit() {
-            this.submitting = true;
-            this.error = '';
-            try {
-              var res = await fetch('/api/event-types', {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({
-                  name: this.name.trim(),
-                  slug: this.slug.trim().toLowerCase(),
-                  duration_minutes: Number(this.duration),
-                  buffer_minutes: Number(this.buffer),
-                  description: this.description.trim() || null,
-                  location_type: this.locationType,
-                  location_value: this.locationValueToSend() || null,
-                }),
-              });
-              if (res.status === 201) {
-                window.location.href = '/dashboard/event-types?toast=' +
-                  encodeURIComponent('Event type created');
-                return;
-              }
-              var body = await res.json().catch(function () { return {}; });
-              this.error = body.error || 'Could not create the event type.';
-              this.submitting = false;
-            } catch (e) {
-              this.error = 'Could not create the event type. Please try again.';
-              this.submitting = false;
-            }
-          },
-        };
-      };
-
       document.addEventListener("click", function (event) {
         var dialogBtn = event.target.closest("[data-dialog-open]");
         if (dialogBtn) {
@@ -259,12 +171,37 @@ export function dashboardPage(
   recent: BookingWithEvent[],
   toast = "",
 ): string {
-  const rows = recent.map((b) => [
-    `<div class="font-medium text-ink">${escapeHtml(b.guest_name)}</div>
-     <div class="text-[0.8125rem] text-muted">${escapeHtml(b.guest_email)}</div>`,
-    `<span class="text-body">${escapeHtml(b.event_name)}</span>`,
-    whenCell(b.start_at, user.timezone),
-  ]);
+  const rows = recent.map((b) => {
+    const isGroup = b.seats_total > 1;
+    const manageTickets = `/dashboard/event-types/${String(b.event_type_id)}/tickets`;
+    const seatsLeft = b.seats_total - b.seats_taken;
+
+    const guestCell = isGroup
+      ? `<div class="font-medium text-ink">${escapeHtml(b.event_name)}</div>
+         <div class="mt-1 flex flex-wrap items-center gap-2">
+           <span class="inline-flex items-center gap-1 rounded border border-line bg-subtle px-1.5 py-0.5 text-[0.75rem] font-medium text-body">
+             ${b.seats_taken}/${b.seats_total} seats
+           </span>
+           ${
+             seatsLeft === 0
+               ? badge("danger", "Sold out", false)
+               : seatsLeft <= 5
+                 ? `<span class="rounded border border-warning/20 bg-warning-soft px-1.5 py-0.5 text-[0.75rem] font-medium text-warning">${seatsLeft} left</span>`
+                 : ""
+           }
+         </div>
+         <a href="${manageTickets}" class="mt-1 inline-flex items-center gap-1 text-[0.75rem] text-accent hover:underline">
+            Manage tickets ${icon("chevronRight", "size-3.5")}
+         </a>`
+      : `<div class="font-medium text-ink">${escapeHtml(b.guest_name)}</div>
+         <div class="text-[0.8125rem] text-muted">${escapeHtml(b.guest_email)}</div>`;
+
+    const typeCell = isGroup
+      ? badge("neutral", "Group event", true)
+      : `<span class="text-body">${escapeHtml(b.event_name)}</span>`;
+
+    return [guestCell, typeCell, whenCell(b.start_at, user.timezone)];
+  });
 
   const firstName = user.name.split(" ")[0] ?? user.name;
 
@@ -290,21 +227,21 @@ export function dashboardPage(
       <div class="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         ${statTile("Upcoming", stats.upcoming, "calendar")}
         ${statTile("Today", stats.today, "clock")}
-        ${statTile("Total appointments", stats.total, "inbox")}
+        ${statTile("Total bookings", stats.total, "inbox")}
         ${statTile("Active event types", stats.activeEventTypes, "layers")}
       </div>
 
       <section class="ui-card overflow-hidden">
         <div class="flex items-center justify-between border-b border-line px-5 py-3.5">
-          <h2 class="text-sm font-semibold text-ink">Upcoming appointments</h2>
-          ${button({ label: "All appointments", href: "/dashboard/bookings", variant: "ghost", size: "sm", iconAfter: "chevronRight" })}
+          <h2 class="text-sm font-semibold text-ink">Upcoming bookings</h2>
+          ${button({ label: "All bookings", href: "/dashboard/bookings", variant: "ghost", size: "sm", iconAfter: "chevronRight" })}
         </div>
         ${table({
-          columns: [{ label: "Guest" }, { label: "Event type" }, { label: "When" }],
+          columns: [{ label: "Booking / Event" }, { label: "Type" }, { label: "When" }],
           rowsHtml: rows,
           emptyHtml: emptyState({
             icon: "calendar",
-            title: "No upcoming appointments",
+            title: "No upcoming bookings",
             body: "Once someone books a slot on your public page it will show up here.",
             actionHtml: `<a class="ui-btn ui-btn-secondary ui-btn-sm" href="/${escapeHtml(user.slug)}"
                               target="_blank" rel="noopener">
@@ -426,7 +363,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
               </button>
             </form>
             <form method="post" action="/dashboard/event-types/${e.id}/delete"
-                  onsubmit="return confirm('Delete this event type? Event types with appointments are deactivated instead.')">
+                  onsubmit="return confirm('Delete this event type? Event types with bookings are deactivated instead.')">
               <button type="submit" class="ui-menu-item ui-menu-item-danger">
                 ${icon("x", "size-4")}<span>Delete</span>
               </button>
@@ -510,10 +447,13 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
         icon: "layers",
         title: "No event types yet",
         body: "An event type is a meeting people can book — a name, a length, and a URL.",
-        actionHtml: `<button type="button" class="ui-btn ui-btn-primary ui-btn-sm"
-                             data-dialog-open="create-event-type">
-          ${icon("plus", "size-4")}<span>New event type</span>
-        </button>`,
+        actionHtml: `${button({
+          label: "New event type",
+          href: "/dashboard/event-types/new",
+          variant: "primary",
+          size: "sm",
+          icon: "plus",
+        })}`,
       })}</div>`;
 
   return layout({
@@ -529,105 +469,424 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
         eyebrow: "Bookable meetings",
         title: "Event types",
         subtitle: "Each one gets its own public booking link.",
-        actionsHtml: `<button type="button" class="ui-btn ui-btn-primary ui-btn-sm"
-                              data-dialog-open="create-event-type">
-          ${icon("plus", "size-4")}<span>New event type</span>
-        </button>`,
+        actionsHtml: `${button({
+          label: "New event type",
+          href: "/dashboard/event-types/new",
+          variant: "primary",
+          size: "sm",
+          icon: "plus",
+        })}`,
       })}
 
       ${list}
 
-      <dialog id="create-event-type" class="ui-dialog" aria-labelledby="create-event-type-title">
-        <div class="ui-dialog-body" x-data="createEventTypeForm()">
-          <div class="flex items-center justify-between gap-4">
-            <h3 id="create-event-type-title" class="text-sm font-semibold text-ink">
-              Create event type
-            </h3>
-            <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2"
-                    data-dialog-close aria-label="Close">
-              ${icon("x", "size-4")}
-            </button>
+      ${EMBED_SCRIPT}`,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+
+export interface CreateEventTypeDraft {
+  name: string;
+  slug: string;
+  description: string;
+  durationMinutes: number;
+  bufferMinutes: number;
+  seatsTotal: number;
+  scheduleMode: "weekly" | "dates";
+  dates: Array<{ date: string; start: string; end: string }>;
+  locationType: string;
+  locationValue: string;
+}
+
+export function eventTypeCreatePage(
+  user: PublicUser,
+  draft?: CreateEventTypeDraft,
+  error?: string,
+  toast = "",
+): string {
+  const d = draft ?? {
+    name: "",
+    slug: "",
+    description: "",
+    durationMinutes: 30,
+    bufferMinutes: 0,
+    seatsTotal: 1,
+    scheduleMode: "weekly" as const,
+    dates: [],
+    locationType: "none",
+    locationValue: "",
+  };
+  const initialDates = d.dates.length
+    ? d.dates
+    : d.scheduleMode === "dates"
+      ? [{ date: "", start: "", end: "" }]
+      : [];
+  const datesOnly = d.scheduleMode === "dates" ? 1 : 0;
+
+  const dateRowsHtml = initialDates
+    .map(
+      (r, i) => `
+    <div class="flex items-center gap-2" data-date-row>
+      <input class="ui-input font-mono" type="date" name="ed_date_${i}" value="${escapeHtml(
+        r.date,
+      )}" aria-label="Date ${i + 1}">
+      <input class="ui-input font-mono" type="time" name="ed_start_${i}" value="${escapeHtml(
+        r.start,
+      )}" aria-label="Start time ${i + 1}">
+      <span class="text-[0.75rem] text-muted shrink-0">to</span>
+      <input class="ui-input font-mono" type="time" name="ed_end_${i}" value="${escapeHtml(
+        r.end,
+      )}" aria-label="End time ${i + 1}">
+      <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
+              data-remove-date aria-label="Remove date">
+        ${icon("x", "size-4")}
+      </button>
+    </div>`,
+    )
+    .join("");
+
+  const locationOptions = ["none", "google_meet", "zoom", "in_person", "phone"]
+    .map(
+      (t) =>
+        `<option value="${t}"${d.locationType === t ? " selected" : ""}>${
+          {
+            none: "No location",
+            google_meet: "Google Meet",
+            zoom: "Zoom",
+            in_person: "In person",
+            phone: "Phone",
+          }[t]
+        }</option>`,
+    )
+    .join("");
+
+  const locationValueField =
+    d.locationType === "google_meet" || d.locationType === "zoom"
+      ? field({
+          name: "location_value",
+          label: "Meeting link",
+          value: d.locationValue,
+          required: false,
+          placeholder: "https://meet.google.com/…",
+        })
+      : d.locationType === "in_person" || d.locationType === "phone"
+        ? field({
+            name: "location_value",
+            label: d.locationType === "in_person" ? "Address" : "Phone number",
+            value: d.locationValue,
+            required: false,
+            placeholder: d.locationType === "in_person" ? "Office address" : "+60 …",
+          })
+        : "";
+
+  return layout({
+    title: "New event type",
+    nav: "host",
+    activeNav: "/dashboard/event-types",
+    hostName: user.name,
+    hostAvatarKey: user.avatar_key,
+    hostSlug: user.slug,
+    toast,
+    body: `
+      <a href="/dashboard/event-types" class="ui-btn ui-btn-ghost ui-btn-sm -ml-2 mb-4">
+        ${icon("arrowLeft", "size-4")}<span>Event types</span>
+      </a>
+
+      ${pageHeader({
+        eyebrow: "Event type",
+        title: "New event type",
+        subtitle: "Create a bookable meeting or ticketed session.",
+      })}
+
+      ${error ? `<div class="mb-4">${alert("danger", error)}</div>` : ""}
+
+      <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <form class="ui-card ui-card-pad space-y-4" method="post"
+              action="/dashboard/event-types" enctype="multipart/form-data">
+          ${field({ name: "name", label: "Name", value: d.name })}
+          ${field({
+            name: "slug",
+            label: "URL slug",
+            value: d.slug,
+            hint: `Public link: /${escapeHtml(user.slug)}/…`,
+          })}
+
+          <div class="ui-fieldset">
+            <label class="ui-label" for="image">
+              Cover image <span class="font-normal text-muted">(optional)</span>
+            </label>
+            <div class="rounded-lg border border-line bg-subtle p-4" data-image-upload>
+              <input type="file" id="image" name="image" accept="image/png,image/jpeg,image/webp,image/gif"
+                     class="block w-full text-[0.8125rem] text-body file:mr-3 file:rounded-md file:border-0
+                            file:bg-primary file:px-3 file:py-1.5 file:text-[0.8125rem] file:font-medium
+                            file:text-on-primary hover:file:opacity-90">
+              <div data-image-preview class="mt-3 hidden">
+                <img src="" alt="Cover preview" class="aspect-video w-full max-w-sm rounded-lg border border-line object-cover">
+                <button type="button" data-remove-image class="mt-2 text-[0.8125rem] text-danger hover:underline">
+                  Remove image
+                </button>
+              </div>
+              <p class="ui-hint mt-2">PNG, JPEG, WebP or GIF. Max 5 MB. 16:9 ratio looks best.</p>
+            </div>
           </div>
 
-          <template x-if="error">
-            <div class="ui-alert ui-alert-danger mt-3" role="alert">
-              ${icon("alert", "size-4 shrink-0 mt-px")}<span x-text="error"></span>
-            </div>
-          </template>
+          ${field({
+            name: "description",
+            label: "Description",
+            required: false,
+            value: d.description,
+            attrsHtml: 'rows="3"',
+          })}
 
-          <form class="mt-4 space-y-4" @submit.prevent="submit()">
-            <div class="ui-fieldset">
-              <label class="ui-label" for="et_name">Name</label>
-              <input class="ui-input" id="et_name" x-model="name" placeholder="Consultation" required>
+          <div class="ui-fieldset">
+            <label class="ui-label" for="seats_total">Booking style</label>
+            <input class="ui-input font-mono" id="seats_total" name="seats_total" type="number"
+                   value="${String(d.seatsTotal)}" min="1" max="100" step="1">
+            <p class="ui-hint">1 = private booking. 2 or more = group/shared slot.</p>
+          </div>
+
+          <div class="ui-fieldset">
+            <label class="ui-label" for="schedule_mode">Schedule</label>
+            <select class="ui-select" id="schedule_mode" name="schedule_mode" data-schedule-mode>
+              <option value="weekly"${datesOnly === 0 ? " selected" : ""}>Weekly schedule</option>
+              <option value="dates"${datesOnly === 1 ? " selected" : ""}>Specific dates only</option>
+            </select>
+            <p class="ui-hint" data-hint-weekly>Slots follow your weekly availability rules.</p>
+            <div data-dates-block class="mt-2 space-y-2" hidden>
+              <p class="ui-hint">
+                Each date runs as one session from start to end — add several rows on the same
+                date for multiple sessions that day.
+              </p>
+              <div class="space-y-2" data-date-rows>
+                ${
+                  dateRowsHtml ||
+                  `
+                  <div class="flex items-center gap-2" data-date-row>
+                    <input class="ui-input font-mono" type="date" name="ed_date_0" aria-label="Date 1">
+                    <input class="ui-input font-mono" type="time" name="ed_start_0" aria-label="Start time 1">
+                    <span class="text-[0.75rem] text-muted shrink-0">to</span>
+                    <input class="ui-input font-mono" type="time" name="ed_end_0" aria-label="End time 1">
+                    <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
+                            data-remove-date aria-label="Remove date">
+                      ${icon("x", "size-4")}
+                    </button>
+                  </div>
+                `
+                }
+              </div>
+              <input type="hidden" name="ed_count" data-date-count value="${initialDates.length}">
+              <div>
+                <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-add-date>
+                  ${icon("plus", "size-4")}<span>Add date</span>
+                </button>
+              </div>
             </div>
-            <div class="ui-fieldset">
-              <label class="ui-label" for="et_slug">URL slug</label>
-              <input class="ui-input font-mono" id="et_slug" x-model="slug" placeholder="consultation"
-                     pattern="[a-z0-9]([a-z0-9-]{0,58}[a-z0-9])?" required>
-              <p class="ui-hint">Public link: /${escapeHtml(user.slug)}/…</p>
+          </div>
+
+          <div data-weekly-block${datesOnly === 1 ? " hidden" : ""}>
+            ${field({
+              name: "duration_minutes",
+              label: "Duration",
+              type: "number",
+              value: String(d.durationMinutes),
+              hint: "Minutes. Slots are generated on this interval.",
+              attrsHtml: 'min="5" max="480" step="5"',
+            })}
+            ${field({
+              name: "buffer_minutes",
+              label: "Buffer after meeting",
+              type: "number",
+              value: String(d.bufferMinutes),
+              hint: "Minutes of breathing room after each booking. 0 = back-to-back.",
+              attrsHtml: 'min="0" max="120" step="5"',
+            })}
+          </div>
+
+          ${field({
+            name: "location_type",
+            label: "Location",
+            required: false,
+            controlHtml: `<select class="ui-select" id="location_type" name="location_type" data-location-type>
+              ${locationOptions}
+            </select>`,
+          })}
+
+          <div data-location-value-block${d.locationType === "none" ? " hidden" : ""}>
+            ${locationValueField}
+          </div>
+
+          <div class="flex justify-end border-t border-line pt-4">
+            ${button({ label: "Create event type", variant: "primary", icon: "check" })}
+          </div>
+        </form>
+
+        <div class="space-y-4">
+          <section class="ui-card ui-card-pad">
+            <p class="ui-eyebrow mb-2">Preview</p>
+            <div class="overflow-hidden rounded-lg border border-line">
+              <div data-preview-image class="aspect-video bg-subtle hidden"></div>
+              <div class="p-4">
+                <p class="text-sm font-semibold text-ink" data-preview-name>${escapeHtml(d.name || "Event name")}</p>
+                <p class="mt-1 text-[0.8125rem] text-muted" data-preview-description>
+                  ${escapeHtml(d.description || "A short description of this event.")}
+                </p>
+                <p class="mt-3 flex items-center gap-1.5 text-[0.8125rem] text-muted">
+                  ${icon("clock", "size-3.5")}
+                  <span class="ui-time" data-preview-duration>${d.durationMinutes} min</span>
+                </p>
+              </div>
             </div>
-            <div class="ui-fieldset">
-              <label class="ui-label" for="et_duration">Duration</label>
-              <input class="ui-input font-mono" id="et_duration" type="number" x-model="duration"
-                     min="5" max="480" step="5" required>
-              <p class="ui-hint">Minutes. Slots are generated on this interval.</p>
-            </div>
-            <div class="ui-fieldset">
-              <label class="ui-label" for="et_buffer">Buffer after meeting</label>
-              <input class="ui-input font-mono" id="et_buffer" type="number" x-model="buffer"
-                     min="0" max="120" step="5">
-              <p class="ui-hint">Minutes of breathing room after each booking. 0 = back-to-back.</p>
-            </div>
-            <div class="ui-fieldset">
-              <label class="ui-label" for="et_description">
-                Description <span class="font-normal text-muted">(optional)</span>
-              </label>
-              <textarea class="ui-input resize-y" id="et_description" rows="3" x-model="description"
-                        placeholder="A 30-minute intro call"></textarea>
-            </div>
-            <div class="ui-fieldset">
-              <label class="ui-label" for="et_location_type">Location</label>
-              <select class="ui-select" id="et_location_type" x-model="locationType" @change="loadSaved()">
-                <option value="none">No location</option>
-                <option value="google_meet">Google Meet</option>
-                <option value="zoom">Zoom</option>
-                <option value="in_person">In person</option>
-                <option value="phone">Phone</option>
-              </select>
-            </div>
-            <div class="ui-fieldset" x-show="locationType !== 'none'">
-              <template x-if="locationType === 'google_meet' || locationType === 'zoom'">
-                <div>
-                  <label class="ui-label" for="et_location_value">Meeting link</label>
-                  <select class="ui-select" id="et_location_value" x-model="savedLink" required>
-                    <option value="__new__">Use a new link…</option>
-                    <template x-for="link in savedLinks" :key="link">
-                      <option :value="link" x-text="link"></option>
-                    </template>
-                  </select>
-                  <input class="ui-input mt-2" x-show="savedLink === '__new__'" x-model="locationValue"
-                         :required="savedLink === '__new__'"
-                         placeholder="https://meet.google.com/…" id="et_new_link">
-                </div>
-              </template>
-              <template x-if="locationType === 'in_person' || locationType === 'phone'">
-                <div>
-                  <label class="ui-label" for="et_location_value_alt" x-text="locationLabel()"></label>
-                  <input class="ui-input" id="et_location_value_alt" x-model="locationValue"
-                         :placeholder="locationPlaceholder()" required>
-                </div>
-              </template>
-            </div>
-            <div class="flex justify-end gap-2 pt-1">
-              <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm" data-dialog-close>Cancel</button>
-              <button class="ui-btn ui-btn-primary ui-btn-sm" type="submit" :disabled="submitting">
-                <span x-text="submitting ? 'Creating…' : 'Create'"></span>
-              </button>
-            </div>
-          </form>
+          </section>
         </div>
-      </dialog>
-      ${EMBED_SCRIPT}`,
+      </div>
+
+      <script>
+        (function () {
+          var mode = document.querySelector("[data-schedule-mode]");
+          var block = document.querySelector("[data-dates-block]");
+          var hint = document.querySelector("[data-hint-weekly]");
+          var count = document.querySelector("[data-date-count]");
+          var list = document.querySelector("[data-date-rows]");
+          if (!mode || !block || !list || !count) return;
+
+          function sync() {
+            var dates = mode.value === "dates";
+            block.hidden = !dates;
+            hint.hidden = dates;
+            var weeklyBlock = document.querySelector("[data-weekly-block]");
+            if (weeklyBlock) weeklyBlock.hidden = dates;
+            count.value = dates ? String(list.querySelectorAll("[data-date-row]").length) : "0";
+          }
+
+          function reindex() {
+            var rows = list.querySelectorAll("[data-date-row]");
+            rows.forEach(function (row, i) {
+              row.querySelector('[name^="ed_date_"]').name = "ed_date_" + i;
+              row.querySelector('[name^="ed_start_"]').name = "ed_start_" + i;
+              row.querySelector('[name^="ed_end_"]').name = "ed_end_" + i;
+              ["Date", "Start time", "End time"].forEach(function (label, k) {
+                var input = row.querySelectorAll("input")[k];
+                if (input) input.setAttribute("aria-label", label + " " + (i + 1));
+              });
+            });
+            count.value = String(rows.length);
+          }
+
+          mode.addEventListener("change", sync);
+
+          document.querySelector("[data-add-date]").addEventListener("click", function () {
+            var rows = list.querySelectorAll("[data-date-row]");
+            var clone = rows[rows.length - 1].cloneNode(true);
+            clone.querySelectorAll("input").forEach(function (input) { input.value = ""; });
+            list.appendChild(clone);
+            reindex();
+            clone.querySelector("input").focus();
+          });
+
+          list.addEventListener("click", function (event) {
+            var btn = event.target.closest("[data-remove-date]");
+            if (!btn) return;
+            var rows = list.querySelectorAll("[data-date-row]");
+            if (rows.length === 1) {
+              rows[0].querySelectorAll("input").forEach(function (i) { i.value = ""; });
+            } else {
+              btn.closest("[data-date-row]").remove();
+              reindex();
+            }
+          });
+
+          sync();
+        })();
+
+        (function () {
+          var fileInput = document.getElementById("image");
+          var previewWrap = document.querySelector("[data-image-preview]");
+          var previewImg = previewWrap ? previewWrap.querySelector("img") : null;
+          var removeBtn = document.querySelector("[data-remove-image]");
+          var previewName = document.querySelector("[data-preview-name]");
+          var previewDesc = document.querySelector("[data-preview-description]");
+          var nameInput = document.getElementById("name");
+          var descInput = document.getElementById("description");
+          var previewImageCard = document.querySelector("[data-preview-image]");
+
+          if (previewName && nameInput) {
+            nameInput.addEventListener("input", function () {
+              previewName.textContent = nameInput.value.trim() || "Event name";
+            });
+          }
+          if (previewDesc && descInput) {
+            descInput.addEventListener("input", function () {
+              previewDesc.textContent = descInput.value.trim() || "A short description of this event.";
+            });
+          }
+
+          function clearPreview() {
+            if (fileInput) fileInput.value = "";
+            if (previewWrap) previewWrap.classList.add("hidden");
+            if (previewImageCard) {
+              previewImageCard.style.backgroundImage = "";
+              previewImageCard.classList.add("hidden");
+            }
+          }
+
+          if (fileInput && previewImg && previewWrap) {
+            fileInput.addEventListener("change", function () {
+              var file = fileInput.files && fileInput.files[0];
+              if (!file) return clearPreview();
+              var url = URL.createObjectURL(file);
+              previewImg.src = url;
+              previewWrap.classList.remove("hidden");
+              if (previewImageCard) {
+                previewImageCard.style.backgroundImage = 'url("' + url + '")';
+                previewImageCard.style.backgroundSize = "cover";
+                previewImageCard.style.backgroundPosition = "center";
+                previewImageCard.classList.remove("hidden");
+              }
+            });
+          }
+
+          if (removeBtn) removeBtn.addEventListener("click", clearPreview);
+        })();
+
+        (function () {
+          var locationType = document.getElementById("location_type");
+          var valueBlock = document.querySelector("[data-location-value-block]");
+          if (!locationType || !valueBlock) return;
+
+          var placeholders = {
+            google_meet: "https://meet.google.com/…",
+            zoom: "https://zoom.us/j/…",
+            in_person: "Office address",
+            phone: "+60 …"
+          };
+          var labels = {
+            google_meet: "Meeting link",
+            zoom: "Meeting link",
+            in_person: "Address",
+            phone: "Phone number"
+          };
+
+          function syncLocation() {
+            var type = locationType.value;
+            if (type === "none") {
+              valueBlock.hidden = true;
+              return;
+            }
+            valueBlock.hidden = false;
+            var input = valueBlock.querySelector("input");
+            var label = valueBlock.querySelector(".ui-label");
+            if (input) {
+              input.placeholder = placeholders[type] || "";
+              input.value = input.value || "";
+            }
+            if (label) label.textContent = labels[type] || "Location details";
+          }
+
+          locationType.addEventListener("change", syncLocation);
+          syncLocation();
+        })();
+      </script>`,
   });
 }
 
@@ -640,6 +899,7 @@ export function eventTypeEditPage(
   error?: string,
   toast = "",
   savedLocations: string[] = [],
+  dateRows: Array<{ date: string; start: string; end: string }> = [],
 ): string {
   const path = `/${user.slug}/${eventType.slug}`;
   const active = eventType.is_active === 1;
@@ -650,11 +910,11 @@ export function eventTypeEditPage(
     bookingCount > 0
       ? {
           label: "Deactivate permanently",
-          note: `${bookingCount} appointment${bookingCount === 1 ? "" : "s"} reference this event type, so it is deactivated rather than deleted.`,
+          note: `${bookingCount} booking${bookingCount === 1 ? "" : "s"} reference this event type, so it is deactivated rather than deleted.`,
         }
       : {
           label: "Delete event type",
-          note: "No appointments reference it, so it will be removed entirely.",
+          note: "No bookings reference it, so it will be removed entirely.",
         };
 
   return layout({
@@ -674,8 +934,16 @@ export function eventTypeEditPage(
         eyebrow: "Event type",
         title: eventType.name,
         subtitle: path,
-        actionsHtml: `${
-          active ? badge("success", "Active") : badge("neutral", "Inactive", false)
+        actionsHtml: `${active ? badge("success", "Active") : badge("neutral", "Inactive", false)}${
+          eventType.seats_total > 1
+            ? button({
+                label: "Tickets",
+                href: `/dashboard/event-types/${eventType.id}/tickets`,
+                variant: "secondary",
+                size: "sm",
+                icon: "check",
+              })
+            : ""
         }${button({ label: "Preview", href: path, variant: "secondary", size: "sm", icon: "link" })}`,
       })}
 
@@ -683,7 +951,7 @@ export function eventTypeEditPage(
 
       <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <form class="ui-card ui-card-pad space-y-4" method="post"
-              action="/dashboard/event-types/${eventType.id}">
+              action="/dashboard/event-types/${eventType.id}" enctype="multipart/form-data">
           ${field({ name: "name", label: "Name", value: eventType.name })}
           ${field({
             name: "slug",
@@ -691,12 +959,45 @@ export function eventTypeEditPage(
             value: eventType.slug,
             hint: `Changing this breaks any link already shared as ${path}.`,
           })}
+
+          <div class="ui-fieldset">
+            <label class="ui-label" for="image">
+              Cover image <span class="font-normal text-muted">(optional)</span>
+            </label>
+            <div class="rounded-lg border border-line bg-subtle p-4" data-image-upload>
+              ${
+                eventType.image_key
+                  ? `<div data-current-image class="mb-3">
+                       <img src="/${escapeHtml(eventType.image_key)}" alt="Current cover image"
+                            class="aspect-video w-full max-w-sm rounded-lg border border-line object-cover">
+                       <label class="mt-2 flex items-center gap-2 text-[0.8125rem] text-danger">
+                         <input type="checkbox" name="remove_image" value="1">
+                         Remove image
+                       </label>
+                     </div>`
+                  : ""
+              }
+              <input type="file" id="image" name="image" accept="image/png,image/jpeg,image/webp,image/gif"
+                     class="block w-full text-[0.8125rem] text-body file:mr-3 file:rounded-md file:border-0
+                            file:bg-primary file:px-3 file:py-1.5 file:text-[0.8125rem] file:font-medium
+                            file:text-on-primary hover:file:opacity-90">
+              <div data-image-preview class="mt-3 hidden">
+                <img src="" alt="New cover preview" class="aspect-video w-full max-w-sm rounded-lg border border-line object-cover">
+                <button type="button" data-remove-image class="mt-2 text-[0.8125rem] text-danger hover:underline">
+                  Remove new image
+                </button>
+              </div>
+              <p class="ui-hint mt-2">PNG, JPEG, WebP or GIF. Max 5 MB. 16:9 ratio looks best.</p>
+            </div>
+          </div>
+
+          <div data-weekly-block>
           ${field({
             name: "duration_minutes",
             label: "Duration",
             type: "number",
             value: String(eventType.duration_minutes),
-            hint: "Minutes. Existing appointments keep their original length.",
+            hint: "Minutes. Existing bookings keep their original length.",
             attrsHtml: 'min="5" max="480" step="5"',
           })}
           ${field({
@@ -707,6 +1008,7 @@ export function eventTypeEditPage(
             hint: "Minutes of breathing room after each booking.",
             attrsHtml: 'min="0" max="120" step="5"',
           })}
+          </div>
           ${field({
             name: "seats_total",
             label: "Seats",
@@ -715,9 +1017,67 @@ export function eventTypeEditPage(
             hint:
               eventType.seats_total > 1
                 ? `Group event — up to ${eventType.seats_total} guests share a slot.`
-                : "1 = private appointment. Raise it to run group events.",
+                : "1 = private booking. Raise it to run group events.",
             attrsHtml: 'min="1" max="100" step="1"',
           })}
+          <div class="ui-fieldset">
+            <label class="ui-label" for="schedule_mode">Schedule</label>
+            <select class="ui-select" id="schedule_mode" name="schedule_mode" data-schedule-mode>
+              <option value="weekly"${eventType.dates_only === 1 ? "" : " selected"}>
+                Weekly schedule
+              </option>
+              <option value="dates"${eventType.dates_only === 1 ? " selected" : ""}>
+                Specific dates only
+              </option>
+            </select>
+            <p class="ui-hint" data-hint-weekly>Slots follow your weekly availability rules.</p>
+            <div data-dates-block class="mt-2 space-y-2" hidden>
+              <p class="ui-hint">
+                Each date runs as one session from start to end — add several rows on the same
+                date for multiple sessions that day.
+              </p>
+              <div class="space-y-2" data-date-rows>
+                ${
+                  dateRows.length
+                    ? dateRows
+                        .map(
+                          (r, i) => `
+                  <div class="flex items-center gap-2" data-date-row>
+                    <input class="ui-input font-mono" type="date" name="ed_date_${i}"
+                           value="${escapeHtml(r.date)}" aria-label="Date ${i + 1}">
+                    <input class="ui-input font-mono" type="time" name="ed_start_${i}"
+                           value="${escapeHtml(r.start)}" aria-label="Start time ${i + 1}">
+                    <span class="text-[0.75rem] text-muted shrink-0">to</span>
+                    <input class="ui-input font-mono" type="time" name="ed_end_${i}"
+                           value="${escapeHtml(r.end)}" aria-label="End time ${i + 1}">
+                    <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
+                            data-remove-date aria-label="Remove date">
+                      ${icon("x", "size-4")}
+                    </button>
+                  </div>`,
+                        )
+                        .join("")
+                    : `<div class="flex items-center gap-2" data-date-row>
+                    <input class="ui-input font-mono" type="date" name="ed_date_0" aria-label="Date 1">
+                    <input class="ui-input font-mono" type="time" name="ed_start_0" aria-label="Start time 1">
+                    <span class="text-[0.75rem] text-muted shrink-0">to</span>
+                    <input class="ui-input font-mono" type="time" name="ed_end_0" aria-label="End time 1">
+                    <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
+                            data-remove-date aria-label="Remove date">
+                      ${icon("x", "size-4")}
+                    </button>
+                  </div>`
+                }
+              </div>
+              <input type="hidden" name="ed_count" data-date-count
+                     value="${eventType.dates_only === 1 ? Math.max(1, dateRows.length) : 0}">
+              <div>
+                <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-add-date>
+                  ${icon("plus", "size-4")}<span>Add date</span>
+                </button>
+              </div>
+            </div>
+          </div>
           ${field({
             name: "description",
             label: "Description",
@@ -789,7 +1149,7 @@ export function eventTypeEditPage(
               ${
                 active
                   ? "Guests can see and book this event type."
-                  : "Hidden from your public page. Existing appointments are unaffected."
+                  : "Hidden from your public page. Existing bookings are unaffected."
               }
             </p>
             <form method="post" action="/dashboard/event-types/${eventType.id}/toggle" class="mt-3">
@@ -810,11 +1170,406 @@ export function eventTypeEditPage(
             </form>
           </section>
         </div>
-      </div>`,
+      </div>
+
+      <script>
+        (function () {
+          var mode = document.querySelector("[data-schedule-mode]");
+          var block = document.querySelector("[data-dates-block]");
+          var hint = document.querySelector("[data-hint-weekly]");
+          var count = document.querySelector("[data-date-count]");
+          var list = document.querySelector("[data-date-rows]");
+          if (!mode || !block || !list || !count) return;
+
+          function sync() {
+            var dates = mode.value === "dates";
+            block.hidden = !dates;
+            hint.hidden = dates;
+            var weeklyBlock = document.querySelector("[data-weekly-block]");
+            if (weeklyBlock) weeklyBlock.hidden = dates;
+            count.value = dates ? String(list.querySelectorAll("[data-date-row]").length) : "0";
+          }
+
+          function reindex() {
+            var rows = list.querySelectorAll("[data-date-row]");
+            rows.forEach(function (row, i) {
+              row.querySelector('[name^="ed_date_"]').name = "ed_date_" + i;
+              row.querySelector('[name^="ed_start_"]').name = "ed_start_" + i;
+              row.querySelector('[name^="ed_end_"]').name = "ed_end_" + i;
+              ["Date", "Start time", "End time"].forEach(function (label, k) {
+                var input = row.querySelectorAll("input")[k];
+                if (input) input.setAttribute("aria-label", label + " " + (i + 1));
+              });
+            });
+            count.value = String(rows.length);
+          }
+
+          mode.addEventListener("change", sync);
+
+          document.querySelector("[data-add-date]").addEventListener("click", function () {
+            var rows = list.querySelectorAll("[data-date-row]");
+            var clone = rows[rows.length - 1].cloneNode(true);
+            clone.querySelectorAll("input").forEach(function (input) { input.value = ""; });
+            list.appendChild(clone);
+            reindex();
+            clone.querySelector("input").focus();
+          });
+
+          list.addEventListener("click", function (event) {
+            var btn = event.target.closest("[data-remove-date]");
+            if (!btn) return;
+            var rows = list.querySelectorAll("[data-date-row]");
+            if (rows.length === 1) {
+              rows[0].querySelectorAll("input").forEach(function (i) { i.value = ""; });
+            } else {
+              btn.closest("[data-date-row]").remove();
+              reindex();
+            }
+          });
+
+          sync();
+        })();
+
+        (function () {
+          var fileInput = document.getElementById("image");
+          var previewWrap = document.querySelector("[data-image-preview]");
+          var previewImg = previewWrap ? previewWrap.querySelector("img") : null;
+          var removeBtn = document.querySelector("[data-remove-image]");
+          var removeCheckbox = document.querySelector('input[name="remove_image"]');
+          var currentImage = document.querySelector("[data-current-image]");
+
+          function clearPreview() {
+            if (fileInput) fileInput.value = "";
+            if (previewWrap) previewWrap.classList.add("hidden");
+            if (currentImage) {
+              var removing = removeCheckbox ? removeCheckbox.checked : false;
+              currentImage.classList.toggle("hidden", removing);
+            }
+          }
+
+          if (fileInput && previewImg && previewWrap) {
+            fileInput.addEventListener("change", function () {
+              var file = fileInput.files && fileInput.files[0];
+              if (!file) return clearPreview();
+              if (removeCheckbox) removeCheckbox.checked = false;
+              if (currentImage) currentImage.classList.add("hidden");
+              previewImg.src = URL.createObjectURL(file);
+              previewWrap.classList.remove("hidden");
+            });
+          }
+
+          if (removeBtn) removeBtn.addEventListener("click", clearPreview);
+
+          if (removeCheckbox && currentImage) {
+            removeCheckbox.addEventListener("change", function () {
+              currentImage.classList.toggle("hidden", removeCheckbox.checked);
+            });
+          }
+        })();
+      </script>`,
   });
 }
 
 /* -------------------------------------------------------------------------- */
+
+/* -------------------------------------------------------------------------- */
+
+export interface TicketManagerGuest {
+  attendeeId: number;
+  bookingId: number;
+  name: string;
+  email: string;
+  code: string | null;
+  checkedIn: boolean;
+  cancelled: boolean;
+  /** Session the guest is registered for, fixed-width UTC. */
+  sessionStartAt: string;
+  sessionLabel?: string;
+}
+
+export interface TicketManagerSession {
+  /** Session start, fixed-width UTC; labelled by the view. */
+  startAt: string;
+  registered: number;
+  checkedIn: number;
+  /** Filled in by the view (host-local "When" label). */
+  label?: string;
+}
+
+export interface TicketManagerData {
+  capacity: number;
+  registered: number;
+  checkedIn: number;
+  sessions: TicketManagerSession[];
+  guests: TicketManagerGuest[];
+  /** Public booking URL for sharing. */
+  publicUrl: string;
+}
+
+const GUEST_ROW_SCRIPT = `
+  <script>
+    (function () {
+      var search = document.querySelector("[data-guest-search]");
+      var filter = document.body.getAttribute("data-guest-default-filter") || "all";
+      function apply() {
+        var q = (search && search.value || "").trim().toLowerCase();
+        var visible = 0;
+        document.querySelectorAll("[data-guest]").forEach(function (row) {
+          var state = row.getAttribute("data-state");
+          var okFilter = filter === "all" ||
+            (filter === "in" && state === "in") ||
+            (filter === "out" && state === "out");
+          var okQ = !q || (row.getAttribute("data-text") || "").indexOf(q) !== -1;
+          row.hidden = !(okFilter && okQ);
+          if (!row.hidden) visible++;
+        });
+        var counter = document.querySelector("[data-guest-visible]");
+        if (counter) counter.textContent = String(visible);
+      }
+      document.querySelectorAll("[data-guest-filter]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          filter = btn.getAttribute("data-guest-filter");
+          document.querySelectorAll("[data-guest-filter]").forEach(function (b) {
+            b.classList.toggle("ui-seg-active", b === btn);
+          });
+          apply();
+        });
+      });
+      if (search) search.addEventListener("input", apply);
+      apply();
+    })();
+    (function () {
+      var btn = document.querySelector("[data-copy-link]");
+      if (!btn) return;
+      btn.addEventListener("click", function () {
+        var input = document.querySelector("[data-copy-value]");
+        var value = input ? input.value : "";
+        function done() {
+          var original = btn.textContent;
+          btn.textContent = "Copied";
+          window.setTimeout(function () { btn.textContent = original; }, 1500);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(value).then(done);
+        } else {
+          input.select();
+          try { document.execCommand("copy"); } catch (e) {}
+          done();
+        }
+      });
+    })();
+  </script>`;
+
+function whenLabel(iso: string, timeZone: string): string {
+  const p = whenParts(iso, timeZone);
+  return `${p.day} · ${p.clock}`;
+}
+
+function withSessionLabels(data: TicketManagerData, timeZone: string): TicketManagerData {
+  return {
+    ...data,
+    sessions: data.sessions.map((s) => ({ ...s, label: whenLabel(s.startAt, timeZone) })),
+    guests: data.guests.map((g) => ({ ...g, sessionLabel: whenLabel(g.sessionStartAt, timeZone) })),
+  };
+}
+
+function ticketGuestRow(guest: TicketManagerGuest, backPath: string, compact = false): string {
+  const state = guest.cancelled ? "cancelled" : guest.checkedIn ? "in" : "out";
+  const back = encodeURIComponent(backPath);
+  const control = guest.cancelled
+    ? `<span class="ui-badge ui-badge-neutral shrink-0">Cancelled</span>`
+    : `<form method="post"
+           action="/dashboard/bookings/${guest.bookingId}/attendees/${guest.attendeeId}/check-in?back=${back}">
+        <button type="submit" class="${
+          guest.checkedIn
+            ? "ui-badge ui-badge-success cursor-pointer hover:brightness-95"
+            : compact
+              ? "ui-btn ui-btn-primary ui-btn-sm"
+              : "ui-btn ui-btn-secondary ui-btn-sm"
+        }" ${guest.checkedIn ? 'title="Click to undo check-in"' : ""}>
+          ${
+            guest.checkedIn
+              ? `${icon("check", "size-3.5")}<span>In</span>`
+              : `${icon("check", "size-4")}<span>Check in</span>`
+          }
+        </button>
+      </form>`;
+  return `<li data-guest data-state="${state}"
+        data-text="${escapeHtml(
+          `${guest.name} ${guest.code ?? ""} ${guest.email}`.toLowerCase(),
+        )}" class="py-2.5">
+      <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <span class="text-[0.875rem] font-medium text-ink">${escapeHtml(guest.name)}</span>
+          <span class="rounded border border-line bg-subtle px-1.5 py-0.5 font-mono text-[0.75rem] font-medium tracking-[0.06em] text-ink">${escapeHtml(
+            guest.code ?? "—",
+          )}</span>
+          <span class="truncate text-[0.75rem] text-muted">${escapeHtml(guest.email)}</span>
+          <span class="text-[0.6875rem] text-muted">· ${escapeHtml(guest.sessionLabel ?? "")}</span>
+        </div>
+        ${control}
+      </div>
+    </li>`;
+}
+
+function ticketGuestSection(
+  guests: TicketManagerGuest[],
+  backPath: string,
+  opts: { compact?: boolean; defaultFilter?: string; autofocus?: boolean } = {},
+): string {
+  if (guests.length === 0) {
+    return `<div class="ui-card ui-card-pad">${emptyState({
+      icon: "user",
+      title: "No registrations yet",
+      body: "Share the public link — guests appear here the moment they take a seat.",
+    })}</div>`;
+  }
+  const filters = opts.compact
+    ? ""
+    : `<div class="ui-seg" role="group" aria-label="Filter guests">
+        <button type="button" data-guest-filter="all">All</button>
+        <button type="button" data-guest-filter="out">Not in</button>
+        <button type="button" data-guest-filter="in">In</button>
+      </div>`;
+  return `<div class="ui-card ui-card-pad">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        ${filters}
+        <div class="flex min-w-0 items-center gap-2">
+          <span class="text-[0.75rem] text-muted" data-guest-visible></span>
+          <input type="search" data-guest-search ${opts.autofocus ? "autofocus" : ""}
+                 placeholder="Search name, code or email"
+                 class="ui-input w-full max-w-xs py-1.5 text-[0.8125rem]">
+        </div>
+      </div>
+      <ul class="mt-2 divide-y divide-line">${guests
+        .map((g) => ticketGuestRow(g, backPath, opts.compact))
+        .join("")}</ul>
+    </div>`;
+}
+
+/** Full manager for one ticketed event type. */
+export function eventTicketsPage(
+  user: PublicUser,
+  eventType: EventTypeRow,
+  data: TicketManagerData,
+  toast = "",
+): string {
+  const backPath = `/dashboard/event-types/${eventType.id}/tickets`;
+  const labelled = withSessionLabels(data, user.timezone);
+  const sessionRows = labelled.sessions
+    .map(
+      (s) => `<tr>
+        <td class="text-[0.8125rem]"><span class="font-medium text-ink">${escapeHtml(s.label ?? "")}</span></td>
+        <td class="text-[0.8125rem] text-body font-mono">${s.registered}/${data.capacity}</td>
+        <td class="text-[0.8125rem] text-body font-mono">${s.checkedIn}</td>
+        <td>${
+          s.registered >= data.capacity
+            ? badge("danger", "Full", false)
+            : s.registered === 0
+              ? badge("neutral", "Open", false)
+              : badge("success", "Selling", false)
+        }</td>
+      </tr>`,
+    )
+    .join("");
+
+  return layout({
+    title: `Tickets — ${eventType.name}`,
+    nav: "host",
+    activeNav: "/dashboard/event-types",
+    hostName: user.name,
+    hostAvatarKey: user.avatar_key,
+    hostSlug: user.slug,
+    toast,
+    body: `
+      <a href="/dashboard/event-types" class="ui-btn ui-btn-ghost ui-btn-sm -ml-2 mb-4">
+        ${icon("arrowLeft", "size-4")}<span>Event types</span>
+      </a>
+
+      ${pageHeader({
+        eyebrow: "Ticket manager",
+        title: eventType.name,
+        subtitle: `${data.capacity} seats per session`,
+        actionsHtml: `${button({
+          label: "Door mode",
+          href: `${backPath}?door=1`,
+          variant: "secondary",
+          size: "sm",
+          icon: "search",
+        })}${button({ label: "Preview", href: data.publicUrl, variant: "ghost", size: "sm", icon: "link" })}`,
+      })}
+
+      <div class="mb-4 grid gap-3 sm:grid-cols-3">
+        ${statTile("Registered", String(data.registered), "user")}
+        ${statTile("Checked in", String(data.checkedIn), "check")}
+        ${statTile("Seats left", String(data.capacity - data.registered), "calendar")}
+      </div>
+
+      <div class="ui-card ui-card-pad mb-4">
+        <p class="ui-eyebrow mb-2">Public link</p>
+        <div class="flex items-center gap-2">
+          <input readonly data-copy-value class="ui-input font-mono text-[0.75rem]" value="${escapeHtml(
+            data.publicUrl,
+          )}">
+          <button type="button" data-copy-link class="ui-btn ui-btn-secondary ui-btn-sm shrink-0">
+            ${icon("copy", "size-4")}<span>Copy</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="ui-card ui-card-pad mb-4">
+        <p class="ui-eyebrow mb-3">Sessions</p>
+        ${
+          data.sessions.length === 0
+            ? `<p class="text-[0.8125rem] text-muted">No sessions on the books yet.</p>`
+            : `<table class="ui-table w-full">
+                <thead><tr><th>When</th><th>Registered</th><th>Checked in</th><th></th></tr></thead>
+                <tbody>${sessionRows}</tbody>
+              </table>`
+        }
+      </div>
+
+      <p class="ui-eyebrow mb-2">Guests</p>
+      ${ticketGuestSection(labelled.guests, backPath)}
+      ${GUEST_ROW_SCRIPT}`,
+  });
+}
+
+/** Fullscreen check-in console for the door screen. */
+export function doorModePage(
+  user: PublicUser,
+  eventType: EventTypeRow,
+  data: TicketManagerData,
+): string {
+  const backPath = `/dashboard/event-types/${eventType.id}/tickets`;
+  return layout({
+    title: `Door — ${eventType.name}`,
+    nav: "none",
+    activeNav: "",
+    hostName: user.name,
+    hostAvatarKey: user.avatar_key,
+    hostSlug: user.slug,
+    body: `
+      <div class="mx-auto max-w-3xl ui-rise">
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p class="ui-eyebrow">Door check-in</p>
+            <h1 class="text-lg font-semibold tracking-[-0.02em] text-ink">${escapeHtml(eventType.name)}</h1>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="ui-badge ui-badge-neutral">${data.checkedIn}/${data.registered} in</span>
+            <a href="${backPath}" class="ui-btn ui-btn-ghost ui-btn-sm">Exit door mode</a>
+          </div>
+        </div>
+
+        ${ticketGuestSection(withSessionLabels(data, user.timezone).guests, backPath, {
+          compact: true,
+          defaultFilter: "out",
+          autofocus: true,
+        })}
+        ${GUEST_ROW_SCRIPT}`,
+  });
+}
 
 export function availabilityPage(
   user: PublicUser,
@@ -952,69 +1707,102 @@ export function bookingsPage(
         ? badge("danger", "Cancelled")
         : badge("neutral", status, false);
 
-  const rows = bookings.map((b) => [
-    `<div class="font-medium text-ink">${escapeHtml(b.guest_name)}</div>
-     <div class="text-[0.8125rem] text-muted">${escapeHtml(b.guest_email)}</div>
-     ${
-       b.seats_total > 1
-         ? `<p class="mt-1 text-[0.75rem] text-muted">Group — ${b.seats_taken} of ${b.seats_total} seats taken</p>
-            ${
-              (attendeesByBooking.get(b.id) ?? []).length > 0
-                ? `<details class="mt-1.5">
-                     <summary class="cursor-pointer text-[0.75rem] font-medium text-body hover:text-ink">
-                       Attendees &amp; tickets
-                     </summary>
-                     <ul class="mt-1.5 space-y-1">
-                       ${(attendeesByBooking.get(b.id) ?? [])
-                         .map(
-                           (a) => `<li class="text-[0.75rem] text-muted">
-                               <span class="text-body">${escapeHtml(a.guest_name)}</span>
-                               · <span class="font-mono tracking-[0.06em]">${escapeHtml(
-                                 a.ticket_code ?? "—",
-                               )}</span>
-                               · ${escapeHtml(a.guest_email)}${
-                                 a.status === "confirmed"
-                                   ? ""
-                                   : ' · <span class="text-muted">cancelled</span>'
-                               }
-                             </li>`,
-                         )
-                         .join("")}
-                     </ul>
-                   </details>`
-                : ""
-             }`
-         : ""
-     }
-     ${
-       b.notes
-         ? `<p class="mt-1.5 max-w-sm border-l-2 border-line pl-2.5 text-[0.8125rem] text-muted">${escapeHtml(
-             b.notes,
-           )}</p>`
-         : ""
-     }`,
-    `<span class="text-body">${escapeHtml(b.event_name)}</span>`,
-    whenCell(b.start_at, user.timezone),
-    statusBadge(b.status),
-    b.status === "confirmed"
-      ? `<form method="post" action="/dashboard/bookings/${b.id}/cancel"${
-          b.seats_total > 1
-            ? ` onsubmit="return confirm('Cancel this group event? All ${b.seats_taken} guests lose their seat.')"`
-            : ""
-        }>
-           ${button({ label: "Cancel", variant: "danger", size: "sm" })}
-         </form>`
-      : "",
-  ]);
+  const rows = bookings.map((b) => {
+    const attendees = attendeesByBooking.get(b.id) ?? [];
+    const noteBlock = b.notes
+      ? `<p class="mt-1.5 max-w-sm border-l-2 border-line pl-2.5 text-[0.8125rem] text-muted">${escapeHtml(
+          b.notes,
+        )}</p>`
+      : "";
+
+    let guestCell: string;
+    if (b.seats_total > 1 && attendees.length > 0) {
+      const primary = attendees.find((a) => a.guest_email === b.guest_email) ?? attendees[0]!;
+      const others = attendees.length - 1;
+      const confirmed = attendees.filter((a) => a.status === "confirmed");
+      const checkedIn = confirmed.filter((a) => a.checked_in_at).length;
+      const summary =
+        escapeHtml(primary.guest_name) +
+        (others > 0 ? ` +${others} more` : "") +
+        ` · ${confirmed.length}/${b.seats_total} seats · ${checkedIn} in`;
+      const attendeeRow = (a: BookingAttendeeRow) => {
+        const checked = a.checked_in_at !== null;
+        const control =
+          a.status !== "confirmed"
+            ? `<span class="ui-badge ui-badge-neutral shrink-0">Cancelled</span>`
+            : `<form method="post"
+                   action="/dashboard/bookings/${b.id}/attendees/${a.id}/check-in">
+                <button type="submit" class="${
+                  checked
+                    ? "ui-badge ui-badge-success cursor-pointer hover:brightness-95"
+                    : "ui-btn ui-btn-secondary ui-btn-sm"
+                }" ${checked ? 'title="Click to undo check-in"' : ""}>
+                  ${
+                    checked
+                      ? `${icon("check", "size-3.5")}<span>In</span>`
+                      : `${icon("check", "size-4")}<span>Check in</span>`
+                  }
+                </button>
+              </form>`;
+        return `<li class="py-2">
+            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <span class="text-[0.8125rem] font-medium text-ink">${escapeHtml(a.guest_name)}</span>
+                <span class="rounded border border-line bg-subtle px-1.5 py-0.5 font-mono text-[0.75rem] font-medium tracking-[0.06em] text-ink">${escapeHtml(
+                  a.ticket_code ?? "—",
+                )}</span>
+                <span class="truncate text-[0.75rem] text-muted">${escapeHtml(a.guest_email)}</span>
+              </div>
+              ${control}
+            </div>
+            ${a === primary && b.notes ? noteBlock : ""}
+          </li>`;
+      };
+      guestCell = `<details>
+          <summary class="cursor-pointer text-[0.8125rem] font-medium text-body hover:text-ink">
+            ${summary}
+          </summary>
+          <ul class="mt-1 divide-y divide-line">${attendees.map(attendeeRow).join("")}</ul>
+        </details>`;
+    } else {
+      // Private booking (or a legacy group row without attendee records).
+      guestCell = `<div class="font-medium text-ink">${escapeHtml(b.guest_name)}</div>
+       <div class="text-[0.8125rem] text-muted">${escapeHtml(b.guest_email)}</div>
+       ${b.seats_total > 1 ? `<p class="mt-1 text-[0.75rem] text-muted">Group — ${b.seats_taken} of ${b.seats_total} seats taken</p>` : ""}
+       ${noteBlock}`;
+    }
+
+    const actionCell =
+      b.status !== "confirmed"
+        ? ""
+        : b.seats_total > 1
+          ? button({
+              label: "Manage tickets",
+              href: `/dashboard/event-types/${b.event_type_id}/tickets`,
+              variant: "secondary",
+              size: "sm",
+            })
+          : `<form method="post" action="/dashboard/bookings/${b.id}/cancel">
+               ${button({ label: "Cancel", variant: "danger", size: "sm" })}
+             </form>`;
+
+    return [
+      guestCell,
+      `<span class="text-body">${escapeHtml(b.event_name)}</span>`,
+      whenCell(b.start_at, user.timezone),
+      statusBadge(b.status),
+      actionCell,
+    ];
+  });
 
   const emptyCopy: Record<string, string> = {
     upcoming: "Nothing on the calendar yet. Share your booking link to get started.",
     past: "Completed meetings will be listed here.",
-    cancelled: "Cancelled appointments are kept for your records — none so far.",
+    cancelled: "Cancelled bookings are kept for your records — none so far.",
   };
 
   return layout({
-    title: "Appointments",
+    title: "Bookings",
     nav: "host",
     activeNav: "/dashboard/bookings",
     hostName: user.name,
@@ -1024,7 +1812,7 @@ export function bookingsPage(
     body: `
       ${pageHeader({
         eyebrow: "Your calendar",
-        title: "Appointments",
+        title: "Bookings",
         subtitle: `Shown in ${zoneDisplay(user.timezone)}.`,
       })}
 
@@ -1044,7 +1832,7 @@ export function bookingsPage(
           rowsHtml: rows,
           emptyHtml: emptyState({
             icon: "inbox",
-            title: `No ${scope} appointments`,
+            title: `No ${scope} bookings`,
             body: emptyCopy[scope] ?? "Nothing here.",
           }),
         })}

@@ -59,6 +59,18 @@ export function isLocationType(value: string): value is LocationType {
   return (LOCATION_TYPES as readonly string[]).includes(value);
 }
 
+/** One open date of a dates-only event type (host-local date + HH:MM window). */
+export interface EventDatePayload {
+  date: string;
+  start_time: string;
+  end_time: string;
+}
+
+/** Shape and ordering only — callers own count caps and persistence. */
+export function isEventDateRow(r: EventDatePayload): boolean {
+  return isYmd(r.date) && isHhmm(r.start_time) && isHhmm(r.end_time) && r.end_time > r.start_time;
+}
+
 /**
  * Normalizes a location value: link types get an https:// prefix when the host
  * pasted a bare domain. Empty values collapse to null.

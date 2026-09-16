@@ -9,13 +9,10 @@ import {
   hostNotification,
   type BookingEmailContext,
 } from "../lib/emailTemplates";
-import {
-  attendeeCancelUrl,
-  cancelUrl,
-  rescheduleUrl,
-} from "../lib/cancelToken";
+import { attendeeCancelUrl, cancelUrl, rescheduleUrl } from "../lib/cancelToken";
 import { countConfirmedAttendees, getAttendeeById } from "../db/attendees";
 import { sendEmail, type SendOutcome } from "../lib/resend";
+import { buildIcs } from "../lib/ics";
 import { nowIso } from "../lib/time";
 import type { Env } from "../types";
 
@@ -49,9 +46,7 @@ export async function queueAttendeeCancelled(
   bookingId: number,
   attendeeId: number,
 ): Promise<void> {
-  await enqueue(env, [
-    { kind: "attendee_cancelled", bookingId, to: "host", attendeeId },
-  ]);
+  await enqueue(env, [{ kind: "attendee_cancelled", bookingId, to: "host", attendeeId }]);
 }
 
 /** A guest took a seat on a group slot: their confirmation + host headcount. */
@@ -134,8 +129,11 @@ async function loadContext(
       hostName: host.name,
       hostEmail: host.email,
       hostSlug: host.slug,
+      bookingId: booking.id,
       eventName: eventType.name,
       durationMinutes: eventType.duration_minutes,
+      datesOnly: eventType.dates_only === 1,
+      location: eventType.location_value ?? undefined,
       startAt: booking.start_at,
       endAt: booking.end_at,
       notes: guestNotes,
@@ -149,7 +147,7 @@ async function loadContext(
             ? await attendeeCancelUrl(env.APP_URL, booking.id, job.attendeeId, env.SESSION_SECRET)
             : await cancelUrl(env.APP_URL, booking.id, env.SESSION_SECRET)
           : undefined,
-      // Reschedule is only offered in the confirmation of private appointments.
+      // Reschedule is only offered in the confirmation of private bookings.
       rescheduleUrl:
         job.to === "guest" && job.kind === "booking_confirmed" && !isGroup
           ? await rescheduleUrl(env.APP_URL, booking.id, env.SESSION_SECRET)
@@ -185,7 +183,44 @@ export async function processEmailJob(
           ? hostCancellation(ctx, hostTimeZone)
           : guestReminder(ctx, guestTimeZone);
 
-  return sendEmail({ apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM }, message, fetchImpl);
+  return sendEmail(
+    { apiKey: env.RESEND_API_KEY, from: env.EMAIL_FROM },
+    {
+      ...message,
+      // Guest confirmations for confirmed bookings ride with a calendar file.
+      ...(guestConfirms(job) ? { attachments: [calendarInvite(ctx, message.to)] } : {}),
+    },
+    fetchImpl,
+  );
+}
+
+/** Only the two guest-facing confirmations carry the .ics. */
+function guestConfirms(job: EmailJob): boolean {
+  return (
+    (job.kind === "booking_confirmed" || job.kind === "attendee_confirmed") && job.to === "guest"
+  );
+}
+
+function calendarInvite(
+  ctx: BookingEmailContext & { location?: string },
+  guestEmail: string,
+): { filename: string; content: string } {
+  const ics = buildIcs({
+    uid: `booking-${ctx.bookingId}@meetflow`,
+    startAt: ctx.startAt,
+    endAt: ctx.endAt,
+    summary: `${ctx.eventName} with ${ctx.hostName}`,
+    description: [
+      ctx.ticketCode ? `Your ticket: ${ctx.ticketCode}` : null,
+      ctx.location ? `Location: ${ctx.location}` : null,
+      `Guest: ${guestEmail}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    location: ctx.location,
+    organizerName: ctx.hostName,
+  });
+  return { filename: "invite.ics", content: btoa(unescape(encodeURIComponent(ics))) };
 }
 
 /**

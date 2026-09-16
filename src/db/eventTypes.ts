@@ -72,8 +72,12 @@ export interface InsertEventTypeInput {
   bufferMinutes: number;
   /** Guests a single slot can hold (1 = private). */
   seatsTotal: number;
+  /** 1 = slots come only from the type's listed dates. */
+  datesOnly: number;
   locationType: string;
   locationValue: string | null;
+  /** R2 object key for the event cover image, or null when unset. */
+  imageKey: string | null;
   now: string;
 }
 
@@ -83,8 +87,8 @@ export async function insertEventType(
 ): Promise<EventTypeRow> {
   const row = await db
     .prepare(
-      `INSERT INTO event_types (user_id, name, slug, description, duration_minutes, buffer_minutes, seats_total, location_type, location_value, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+      `INSERT INTO event_types (user_id, name, slug, description, duration_minutes, buffer_minutes, seats_total, dates_only, location_type, location_value, image_key, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
        RETURNING *`,
     )
     .bind(
@@ -95,8 +99,10 @@ export async function insertEventType(
       input.durationMinutes,
       input.bufferMinutes,
       input.seatsTotal,
+      input.datesOnly,
       input.locationType,
       input.locationValue,
+      input.imageKey,
       input.now,
       input.now,
     )
@@ -114,8 +120,12 @@ export interface UpdateEventTypeInput {
   bufferMinutes: number;
   /** Guests a single slot can hold (1 = private). */
   seatsTotal: number;
+  /** 1 = slots come only from the type's listed dates. */
+  datesOnly: number;
   locationType: string;
   locationValue: string | null;
+  /** R2 object key for the event cover image, or null when unset. */
+  imageKey: string | null;
   isActive: number;
   now: string;
 }
@@ -130,7 +140,7 @@ export async function updateEventType(
     .prepare(
       `UPDATE event_types
        SET name = ?, slug = ?, description = ?, duration_minutes = ?, buffer_minutes = ?,
-           seats_total = ?, location_type = ?, location_value = ?, is_active = ?, updated_at = ?
+           seats_total = ?, dates_only = ?, location_type = ?, location_value = ?, image_key = ?, is_active = ?, updated_at = ?
        WHERE id = ? AND user_id = ?
        RETURNING *`,
     )
@@ -141,8 +151,10 @@ export async function updateEventType(
       input.durationMinutes,
       input.bufferMinutes,
       input.seatsTotal,
+      input.datesOnly,
       input.locationType,
       input.locationValue,
+      input.imageKey,
       input.isActive,
       input.now,
       id,

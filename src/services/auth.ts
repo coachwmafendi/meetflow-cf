@@ -74,3 +74,69 @@ export async function login(
   const { password_hash: _ignored, ...publicUser } = row;
   return publicUser;
 }
+
+/* ------------------------- Password reset -------------------------------- */
+
+/** One hour to use a reset link. */
+const RESET_TTL_MS = 3_600_000;
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Creates a single-use reset token for the account. Always succeeds silently —
+ * the caller must not reveal whether the address exists. Any previous unused
+ * tokens for the account are voided.
+ */
+export async function createPasswordReset(db: D1Database, email: string): Promise<string | null> {
+  const user = await findUserByEmail(db, email.trim().toLowerCase());
+  if (!user) return null;
+
+  const tokenBytes = new Uint8Array(32);
+  crypto.getRandomValues(tokenBytes);
+  const token = [...tokenBytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const now = nowIso();
+
+  await db.batch([
+    db.prepare("DELETE FROM password_resets WHERE user_id = ? AND used_at IS NULL").bind(user.id),
+    db
+      .prepare(
+        `INSERT INTO password_resets (user_id, token_hash, expires_at, created_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+      .bind(
+        user.id,
+        await sha256Hex(token),
+        new Date(Date.now() + RESET_TTL_MS).toISOString(),
+        now,
+      ),
+  ]);
+  return token;
+}
+
+/** Consumes the token and swaps the password. One use, time-boxed. */
+export async function resetPassword(
+  db: D1Database,
+  token: string,
+  newPassword: string,
+): Promise<void> {
+  if (newPassword.length < 8) throw new AuthError("Password must be at least 8 characters");
+  const row = await db
+    .prepare(
+      `SELECT r.id, r.user_id FROM password_resets r
+        WHERE r.token_hash = ? AND r.used_at IS NULL AND r.expires_at > ?`,
+    )
+    .bind(await sha256Hex(token), nowIso())
+    .first<{ id: number; user_id: number }>();
+  if (!row) throw new AuthError("This reset link is invalid or has expired", 400);
+
+  const passwordHash = await hashPassword(newPassword);
+  await db.batch([
+    db
+      .prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?")
+      .bind(passwordHash, nowIso(), row.user_id),
+    db.prepare("UPDATE password_resets SET used_at = ? WHERE id = ?").bind(nowIso(), row.id),
+  ]);
+}

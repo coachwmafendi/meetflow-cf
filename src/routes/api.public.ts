@@ -60,6 +60,7 @@ publicRoutes.get("/:username/:eventSlug/slots", async (c) => {
       durationMinutes: eventType.duration_minutes,
       bufferMinutes: eventType.buffer_minutes,
       seatsTotal: eventType.seats_total,
+      datesOnly: eventType.dates_only,
       dateYmd: date,
       nowMs: Date.now(),
       extraBusy,
@@ -106,6 +107,7 @@ publicRoutes.get("/:username/:eventSlug/month", async (c) => {
       durationMinutes: eventType.duration_minutes,
       bufferMinutes: eventType.buffer_minutes,
       seatsTotal: eventType.seats_total,
+      datesOnly: eventType.dates_only,
       year,
       month,
       nowMs: Date.now(),
@@ -135,9 +137,7 @@ publicRoutes.post("/:username/:eventSlug/book", rateLimit(LIMITS.book), async (c
     });
     // Off the critical path: the guest gets their confirmation page regardless.
     if (result.attendee) {
-      c.executionCtx.waitUntil(
-        queueAttendeeJoined(c.env, result.booking.id, result.attendee.id),
-      );
+      c.executionCtx.waitUntil(queueAttendeeJoined(c.env, result.booking.id, result.attendee.id));
     } else {
       c.executionCtx.waitUntil(queueBookingCreated(c.env, result.booking.id));
     }

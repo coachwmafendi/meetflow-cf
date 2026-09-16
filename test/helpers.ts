@@ -5,6 +5,7 @@ export async function resetDb(): Promise<void> {
     env.DB.prepare("DELETE FROM google_connections"),
     env.DB.prepare("DELETE FROM bookings"),
     env.DB.prepare("DELETE FROM availability_rules"),
+    env.DB.prepare("DELETE FROM event_dates"),
     env.DB.prepare("DELETE FROM event_types"),
     env.DB.prepare("DELETE FROM users"),
   ]);

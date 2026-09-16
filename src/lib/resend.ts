@@ -13,6 +13,8 @@ export interface EmailMessage {
   html: string;
   text: string;
   replyTo?: string;
+  /** Base64-encoded file attachments, e.g. calendar invites. */
+  attachments?: Array<{ filename: string; content: string }>;
 }
 
 export type SendOutcome =
@@ -53,6 +55,7 @@ export async function sendEmail(
         html: message.html,
         text: message.text,
         ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+        ...(message.attachments?.length ? { attachments: message.attachments } : {}),
       }),
     });
   } catch (err) {

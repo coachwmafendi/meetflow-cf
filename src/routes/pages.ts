@@ -1,7 +1,16 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { listRules, replaceRules, type RuleInput } from "../db/availability";
-import { dashboardStats, getBookingById, listBookings } from "../db/bookings";
+import { listEventDates, replaceEventDates } from "../db/eventDates";
+import { sendEmail } from "../lib/resend";
+import {
+  dashboardStats,
+  getBookingById,
+  getBookingOwned,
+  listBookings,
+  listConfirmedBetween,
+  listConfirmedBookingsForEventType,
+} from "../db/bookings";
 import {
   countBookingsForEventType,
   deleteEventType,
@@ -15,12 +24,14 @@ import {
 } from "../db/eventTypes";
 import { findUserById, findUserBySlug, setAvatarKey, updateUserSettings } from "../db/users";
 import { listSavedLocations } from "../db/savedLocations";
-import { ImageError, avatarKey, validateAvatar } from "../lib/image";
 import {
-  attendeeCancelPath,
-  cancelPath,
-  reschedulePath,
-} from "../lib/cancelToken";
+  ImageError,
+  avatarKey,
+  eventImageKey,
+  validateAvatar,
+  validateEventImage,
+} from "../lib/image";
+import { attendeeCancelPath, cancelPath, reschedulePath } from "../lib/cancelToken";
 import {
   emailFromIdToken,
   exchangeGoogleCode,
@@ -38,10 +49,16 @@ import {
 import { toMinutes } from "../lib/slots";
 import { isoUtc, nowIso } from "../lib/time";
 import { isValidTimeZone, zonedDateString, zonedToUtc } from "../lib/timezone";
-import { isEventSlug, isHhmm, isLocationType, normalizeLocationValue } from "../lib/validate";
+import {
+  isEventDateRow,
+  isEventSlug,
+  isHhmm,
+  isLocationType,
+  normalizeLocationValue,
+} from "../lib/validate";
 import { clearSession, issueSession } from "../middleware/auth";
 import { LIMITS, rateLimit } from "../middleware/rateLimit";
-import { AuthError, login, register } from "../services/auth";
+import { AuthError, createPasswordReset, login, register, resetPassword } from "../services/auth";
 import {
   BookingError,
   cancelAttendeeSeat,
@@ -55,19 +72,27 @@ import {
   countConfirmedAttendees,
   getAttendeeForBooking,
   listAttendees,
+  listAttendeesForEventType,
+  setAttendeeCheckIn,
 } from "../db/attendees";
 import {
   queueAttendeeCancelled,
   queueBookingCancelled,
   queueBookingCreated,
 } from "../services/email";
-import { loginPage, registerPage } from "../views/auth";
+import { forgotPasswordPage, loginPage, registerPage, resetPasswordPage } from "../views/auth";
 import { privacyPage, termsPage } from "../views/legal";
 import { marketingPage } from "../views/marketing";
 import {
   availabilityPage,
+  doorModePage,
+  eventTicketsPage,
+  type TicketManagerData,
+  type TicketManagerGuest,
+  type TicketManagerSession,
   bookingsPage,
   dashboardPage,
+  eventTypeCreatePage,
   eventTypeEditPage,
   eventTypesPage,
   settingsPage,
@@ -142,6 +167,63 @@ pageRoutes.post("/login", loginLimit, async (c) => {
   return c.redirect("/dashboard", 302);
 });
 
+/* ------------------------- Password reset -------------------------------- */
+
+const forgotLimit = rateLimit({ ...LIMITS.login, onLimited: throttled(forgotPasswordPage) });
+
+pageRoutes.get("/forgot-password", (c) =>
+  c.get("user") ? c.redirect("/dashboard") : html(forgotPasswordPage()),
+);
+
+pageRoutes.post("/forgot-password", forgotLimit, async (c) => {
+  const form = await c.req.parseBody();
+  const email = String(form.email ?? "");
+  const token = await createPasswordReset(c.env.DB, email);
+  if (token) {
+    const resetUrl = `${c.env.APP_URL}/reset-password?token=${token}`;
+    // Direct send: reset mail cannot wait for the booking queue.
+    await sendEmail(
+      { apiKey: c.env.RESEND_API_KEY, from: c.env.EMAIL_FROM },
+      {
+        to: email.trim().toLowerCase(),
+        subject: "Reset your MeetFlow password",
+        html: `<p>We received a request to reset your MeetFlow password.</p>
+               <p><a href="${resetUrl}">Choose a new password</a></p>
+               <p>The link works for one hour and can be used once. If it was not you, ignore this email.</p>`,
+        text: `Reset your MeetFlow password: ${resetUrl}\n\nThe link works for one hour and can be used once. If it was not you, ignore this email.`,
+      },
+    );
+  }
+  // Same response either way, so the form cannot probe which emails exist.
+  return toastRedirect(c, "/login", "If that email has an account, a reset link is on its way");
+});
+
+pageRoutes.get("/reset-password", (c) => {
+  if (c.get("user")) return c.redirect("/dashboard");
+  const token = c.req.query("token") ?? "";
+  if (!token) return html(forgotPasswordPage("This reset link is missing its token."), 400);
+  return html(resetPasswordPage(undefined, token));
+});
+
+pageRoutes.post("/reset-password", loginLimit, async (c) => {
+  const form = await c.req.parseBody();
+  const token = String(form.token ?? "");
+  const password = String(form.password ?? "");
+  const confirm = String(form.password_confirm ?? "");
+  if (password !== confirm) {
+    return html(resetPasswordPage("The two passwords do not match.", token), 400);
+  }
+  try {
+    await resetPassword(c.env.DB, token, password);
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return html(resetPasswordPage(err.message, token), err.status);
+    }
+    throw err;
+  }
+  return toastRedirect(c, "/login", "Password updated — you can sign in now");
+});
+
 pageRoutes.post("/register", registerLimit, async (c) => {
   const form = await c.req.parseBody();
   try {
@@ -195,45 +277,260 @@ dashboard.get("/event-types", async (c) => {
   return html(eventTypesPage(user, await listEventTypes(c.env.DB, user.id), readToast(c)));
 });
 
+dashboard.get("/event-types/new", async (c) => {
+  const user = c.get("user");
+  return html(eventTypeCreatePage(user));
+});
+
+function parseEventTypeForm(form: Record<string, string | File>): {
+  name: string;
+  slug: string;
+  description: string;
+  duration: number;
+  bufferMinutes: number;
+  seatsTotal: number;
+  scheduleMode: "weekly" | "dates";
+  datesOnly: number;
+  locationType: string;
+  locationValue: string;
+  dateRows: Array<{ date: string; start: string; end: string }>;
+} {
+  const dateCount = Math.min(100, Number(form.ed_count) || 0);
+  const dateRows: Array<{ date: string; start: string; end: string }> = [];
+  for (let i = 0; i < dateCount; i++) {
+    const date = String(form[`ed_date_${i}`] ?? "").trim();
+    const start = String(form[`ed_start_${i}`] ?? "").trim();
+    const end = String(form[`ed_end_${i}`] ?? "").trim();
+    if (!date && !start && !end) continue;
+    dateRows.push({ date, start, end });
+  }
+  return {
+    name: String(form.name ?? "").trim(),
+    slug: String(form.slug ?? "")
+      .toLowerCase()
+      .trim(),
+    description: form.description ? String(form.description).trim() : "",
+    duration: Number(form.duration_minutes),
+    bufferMinutes: Number(form.buffer_minutes),
+    seatsTotal: Number(form.seats_total),
+    scheduleMode: form.schedule_mode === "dates" ? "dates" : "weekly",
+    datesOnly: form.schedule_mode === "dates" ? 1 : 0,
+    locationType: isLocationType(String(form.location_type ?? ""))
+      ? String(form.location_type)
+      : "none",
+    locationValue:
+      normalizeLocationValue(
+        isLocationType(String(form.location_type ?? "")) ? String(form.location_type) : "none",
+        String(form.location_value ?? ""),
+      ) ?? "",
+    dateRows,
+  };
+}
+
 dashboard.post("/event-types", async (c) => {
   const user = c.get("user");
   const form = await c.req.parseBody();
-  const slug = String(form.slug ?? "").toLowerCase();
-  const duration = Number(form.duration_minutes);
-  const bufferMinutes = Number(form.buffer_minutes);
-  const seatsTotal = Number(form.seats_total);
-  const locationType = isLocationType(String(form.location_type ?? ""))
-    ? String(form.location_type)
-    : "none";
-  const locationValue = normalizeLocationValue(locationType, String(form.location_value ?? ""));
-  const seats =
-    Number.isInteger(seatsTotal) && seatsTotal >= 1 && seatsTotal <= 100 ? seatsTotal : 1;
-  let ok = false;
-  if (isEventSlug(slug) && Number.isInteger(duration) && duration >= 5 && duration <= 480) {
+  const {
+    name,
+    slug,
+    description,
+    duration,
+    bufferMinutes,
+    seatsTotal,
+    scheduleMode,
+    datesOnly,
+    locationType,
+    locationValue,
+    dateRows,
+  } = parseEventTypeForm(form as Record<string, string | File>);
+
+  const locationValueToStore = locationType === "none" ? null : locationValue || null;
+
+  const draft: import("../views/dashboard").CreateEventTypeDraft = {
+    name,
+    slug,
+    description,
+    durationMinutes: Number.isInteger(duration) ? duration : 30,
+    bufferMinutes: Number.isInteger(bufferMinutes) ? bufferMinutes : 0,
+    seatsTotal:
+      Number.isInteger(seatsTotal) && seatsTotal >= 1 && seatsTotal <= 100 ? seatsTotal : 1,
+    scheduleMode,
+    dates: dateRows,
+    locationType,
+    locationValue: locationValueToStore ?? "",
+  };
+
+  const invalid =
+    !name || name.length > 100
+      ? "Name is required and must be 100 characters or fewer."
+      : !isEventSlug(slug)
+        ? "URL slug must be lowercase letters, digits and dashes."
+        : scheduleMode === "weekly" &&
+            (!Number.isInteger(duration) || duration < 5 || duration > 480)
+          ? "Duration must be between 5 and 480 minutes."
+          : scheduleMode === "weekly" &&
+              (!Number.isInteger(bufferMinutes) || bufferMinutes < 0 || bufferMinutes > 120)
+            ? "Buffer must be between 0 and 120 minutes."
+            : !Number.isInteger(seatsTotal) || seatsTotal < 1 || seatsTotal > 100
+              ? "Seats must be between 1 and 100."
+              : datesOnly === 1 && dateRows.length === 0
+                ? "At least one date is required for a dates-only event."
+                : dateRows.some(
+                      (r) =>
+                        !isEventDateRow({
+                          date: r.date,
+                          start_time: r.start,
+                          end_time: r.end,
+                        }),
+                    )
+                  ? "Each date needs a valid date with a start time before its end time."
+                  : locationType !== "none" && !locationValueToStore
+                    ? "Location details are required when a location is set."
+                    : "";
+
+  if (invalid) {
+    return html(eventTypeCreatePage(user, draft, invalid), 400);
+  }
+
+  let imageFile: File | undefined;
+  if (form.image instanceof File && form.image.size > 0) {
+    imageFile = form.image;
+  }
+
+  let imagePayload: { bytes: Uint8Array; format: import("../lib/image").ImageFormat } | undefined;
+  if (imageFile) {
     try {
-      await insertEventType(c.env.DB, {
-        userId: user.id,
-        name: String(form.name ?? "").trim(),
-        slug,
-        description: form.description ? String(form.description).trim() : null,
-        durationMinutes: duration,
-        bufferMinutes:
-          Number.isInteger(bufferMinutes) && bufferMinutes >= 0 && bufferMinutes <= 120
-            ? bufferMinutes
-            : 0,
-        seatsTotal: seats,
-        locationType,
-        locationValue: locationType === "none" ? null : locationValue,
-        now: nowIso(),
-      });
-      ok = true;
+      imagePayload = await validateEventImage(imageFile);
     } catch (err) {
-      if (!String(err).includes("UNIQUE")) throw err;
+      const message = err instanceof ImageError ? err.message : "Invalid image.";
+      return html(eventTypeCreatePage(user, draft, message), 400);
     }
   }
-  return ok
-    ? toastRedirect(c, "/dashboard/event-types", "Event type created")
-    : c.redirect("/dashboard/event-types", 302);
+
+  const finalLocationValue = locationValueToStore || null;
+
+  try {
+    const eventType = await insertEventType(c.env.DB, {
+      userId: user.id,
+      name,
+      slug,
+      description: description || null,
+      durationMinutes: Number.isInteger(duration) ? duration : 0,
+      bufferMinutes: Number.isInteger(bufferMinutes) ? bufferMinutes : 0,
+      seatsTotal: Number.isInteger(seatsTotal) ? seatsTotal : 1,
+      datesOnly,
+      locationType,
+      locationValue: finalLocationValue,
+      imageKey: null,
+      now: nowIso(),
+    });
+
+    if (datesOnly === 1) {
+      await replaceEventDates(
+        c.env.DB,
+        eventType.id,
+        dateRows.map((r) => ({ date: r.date, startTime: r.start, endTime: r.end })),
+        nowIso(),
+      );
+    }
+
+    if (imagePayload) {
+      const key = eventImageKey(user.id, eventType.id, imagePayload.format);
+      await c.env.EVENT_IMAGES.put(key, imagePayload.bytes, {
+        httpMetadata: { contentType: imagePayload.format },
+      });
+      await updateEventType(c.env.DB, eventType.id, user.id, {
+        name: eventType.name,
+        slug: eventType.slug,
+        description: eventType.description,
+        durationMinutes: eventType.duration_minutes,
+        bufferMinutes: eventType.buffer_minutes,
+        seatsTotal: eventType.seats_total,
+        datesOnly: eventType.dates_only,
+        locationType: eventType.location_type,
+        locationValue: eventType.location_value,
+        imageKey: key,
+        isActive: eventType.is_active,
+        now: nowIso(),
+      });
+    }
+
+    return toastRedirect(c, "/dashboard/event-types", "Event type created");
+  } catch (err) {
+    if (String(err).includes("UNIQUE")) {
+      return html(
+        eventTypeCreatePage(user, draft, "You already have an event type with that URL."),
+        409,
+      );
+    }
+    throw err;
+  }
+});
+
+/** Ticket manager: sessions + every guest of one ticketed event, door-check ready. */
+dashboard.get("/event-types/:id/tickets", async (c) => {
+  const user = c.get("user");
+  const eventType = await getEventTypeOwned(c.env.DB, Number(c.req.param("id")), user.id);
+  if (!eventType) return notFound();
+
+  const [bookings, attendees] = await Promise.all([
+    listConfirmedBookingsForEventType(c.env.DB, eventType.id),
+    listAttendeesForEventType(c.env.DB, eventType.id),
+  ]);
+  const byBooking = new Map<number, typeof attendees>();
+  for (const a of attendees) {
+    const list = byBooking.get(a.booking_id) ?? [];
+    list.push(a);
+    byBooking.set(a.booking_id, list);
+  }
+
+  // Sessions: listed dates for dates-only types; booked slots otherwise.
+  const sessions: TicketManagerSession[] = [];
+  if (eventType.dates_only === 1) {
+    const dates = await listEventDates(c.env.DB, eventType.id);
+    for (const d of dates) {
+      const startIso = isoUtc(zonedToUtc(d.date, d.start_time, user.timezone));
+      const booking = bookings.find((b) => b.start_at === startIso);
+      const guests = booking ? (byBooking.get(booking.id) ?? []) : [];
+      sessions.push({
+        startAt: startIso,
+        registered: guests.filter((g) => g.status === "confirmed").length,
+        checkedIn: guests.filter((g) => g.checked_in_at !== null).length,
+      });
+    }
+  } else {
+    for (const b of bookings) {
+      const guests = byBooking.get(b.id) ?? [];
+      sessions.push({
+        startAt: b.start_at,
+        registered: guests.filter((g) => g.status === "confirmed").length,
+        checkedIn: guests.filter((g) => g.checked_in_at !== null).length,
+      });
+    }
+  }
+
+  const guests: TicketManagerGuest[] = attendees.map((a) => ({
+    attendeeId: a.id,
+    bookingId: a.booking_id,
+    name: a.guest_name,
+    email: a.guest_email,
+    code: a.ticket_code,
+    checkedIn: a.checked_in_at !== null,
+    cancelled: a.status !== "confirmed",
+    sessionStartAt: a.session_start,
+  }));
+
+  const data: TicketManagerData = {
+    capacity: eventType.seats_total,
+    registered: guests.filter((g) => !g.cancelled).length,
+    checkedIn: guests.filter((g) => g.checkedIn).length,
+    sessions,
+    guests,
+    publicUrl: `${c.env.APP_URL}/${user.slug}/${eventType.slug}`,
+  };
+
+  if (c.req.query("door") === "1") return html(doorModePage(user, eventType, data));
+  return html(eventTicketsPage(user, eventType, data, readToast(c)));
 });
 
 dashboard.get("/event-types/:id", async (c) => {
@@ -242,6 +539,7 @@ dashboard.get("/event-types/:id", async (c) => {
   const eventType = await getEventTypeOwned(c.env.DB, id, user.id);
   if (!eventType) return notFound();
   const bookings = await countBookingsForEventType(c.env.DB, id);
+  const eventDates = await listEventDates(c.env.DB, id);
   const savedLocations =
     eventType.location_type === "google_meet" || eventType.location_type === "zoom"
       ? (await listSavedLocations(c.env.DB, user.id, eventType.location_type)).map(
@@ -249,7 +547,15 @@ dashboard.get("/event-types/:id", async (c) => {
         )
       : [];
   return html(
-    eventTypeEditPage(user, eventType, bookings, undefined, readToast(c), savedLocations),
+    eventTypeEditPage(
+      user,
+      eventType,
+      bookings,
+      undefined,
+      readToast(c),
+      savedLocations,
+      eventDates.map((d) => ({ date: d.date, start: d.start_time, end: d.end_time })),
+    ),
   );
 });
 
@@ -277,6 +583,39 @@ dashboard.post("/event-types/:id", async (c) => {
   );
   const bookings = await countBookingsForEventType(c.env.DB, id);
 
+  // Event dates: the mode decides whether slots come from the weekly grid or
+  // from the listed dates. Rows are indexed (ed_date_0, ed_start_0, …).
+  const scheduleMode = form.schedule_mode === "dates" ? "dates" : "weekly";
+  const datesOnly = scheduleMode === "dates" ? 1 : 0;
+  const dateCount = Math.min(100, Number(form.ed_count) || 0);
+  const dateRows: { date: string; start: string; end: string }[] = [];
+  for (let i = 0; i < dateCount; i++) {
+    const date = String(form[`ed_date_${i}`] ?? "").trim();
+    const start = String(form[`ed_start_${i}`] ?? "").trim();
+    const end = String(form[`ed_end_${i}`] ?? "").trim();
+    if (!date && !start && !end) continue;
+    dateRows.push({ date, start, end });
+  }
+  const datesInvalid = dateRows.some(
+    (r) => !isEventDateRow({ date: r.date, start_time: r.start, end_time: r.end }),
+  );
+  const datesMissing = datesOnly === 1 && dateRows.length === 0;
+
+  const removeImage = form.remove_image === "1" || form.remove_image === "on";
+
+  // Validate new image before any DB writes so the event type is never
+  // created with a failed upload.
+  let newImagePayload:
+    { bytes: Uint8Array; format: import("../lib/image").ImageFormat } | undefined;
+  if (form.image instanceof File && form.image.size > 0) {
+    try {
+      newImagePayload = await validateEventImage(form.image);
+    } catch (err) {
+      const message = err instanceof ImageError ? err.message : "Invalid image.";
+      return html(eventTypeEditPage(user, current, bookings, message, "", [], dateRows), 400);
+    }
+  }
+
   // Re-render with what the host typed, so a validation error never wipes
   // the form. Unparseable values fall back to the stored row.
   const draft: EventTypeRow = {
@@ -285,13 +624,16 @@ dashboard.post("/event-types/:id", async (c) => {
     slug: slug || current.slug,
     duration_minutes: Number.isInteger(duration) ? duration : current.duration_minutes,
     buffer_minutes: Number.isInteger(bufferMinutes) ? bufferMinutes : current.buffer_minutes,
-    seats_total: Number.isInteger(seatsTotal) && seatsTotal >= 1 && seatsTotal <= 100
-      ? seatsTotal
-      : current.seats_total,
+    seats_total:
+      Number.isInteger(seatsTotal) && seatsTotal >= 1 && seatsTotal <= 100
+        ? seatsTotal
+        : current.seats_total,
+    dates_only: datesOnly,
     description:
       form.description !== undefined ? String(form.description).trim() : current.description,
     location_type: locationType,
     location_value: locationValue ?? "",
+    image_key: removeImage ? null : current.image_key,
   };
 
   const invalid =
@@ -299,34 +641,65 @@ dashboard.post("/event-types/:id", async (c) => {
       ? "Name is required."
       : !isEventSlug(slug)
         ? "URL slug must be lowercase letters, digits and dashes."
-        : !Number.isInteger(duration) || duration < 5 || duration > 480
+        : datesOnly === 0 && (!Number.isInteger(duration) || duration < 5 || duration > 480)
           ? "Duration must be between 5 and 480 minutes."
-          : form.buffer_minutes !== undefined &&
+          : datesOnly === 0 &&
+              form.buffer_minutes !== undefined &&
               (!Number.isInteger(bufferMinutes) || bufferMinutes < 0 || bufferMinutes > 120)
             ? "Buffer must be between 0 and 120 minutes."
             : form.seats_total !== undefined &&
                 (!Number.isInteger(seatsTotal) || seatsTotal < 1 || seatsTotal > 100)
               ? "Seats must be between 1 and 100."
-              : locationType !== "none" && !locationValue
-              ? "Location needs an address, link or number."
-              : null;
-  if (invalid) return html(eventTypeEditPage(user, draft, bookings, invalid), 400);
+              : datesInvalid
+                ? "Event dates need a date and a start time before the end time."
+                : datesMissing
+                  ? "A dates-only event needs at least one date."
+                  : locationType !== "none" && !locationValue
+                    ? "Location needs an address, link or number."
+                    : null;
+  if (invalid) {
+    return html(eventTypeEditPage(user, draft, bookings, invalid, "", [], dateRows), 400);
+  }
+
+  let imageKey = removeImage ? null : current.image_key;
 
   try {
+    if (newImagePayload) {
+      const newKey = eventImageKey(user.id, id, newImagePayload.format);
+      await c.env.EVENT_IMAGES.put(newKey, newImagePayload.bytes, {
+        httpMetadata: { contentType: newImagePayload.format },
+      });
+      if (current.image_key && current.image_key !== newKey) {
+        c.executionCtx.waitUntil(c.env.EVENT_IMAGES.delete(current.image_key));
+      }
+      imageKey = newKey;
+    } else if (removeImage && current.image_key) {
+      c.executionCtx.waitUntil(c.env.EVENT_IMAGES.delete(current.image_key));
+    }
+
     await updateEventType(c.env.DB, id, user.id, {
       name,
       slug,
       description: form.description ? String(form.description).trim() : null,
-      durationMinutes: duration,
+      durationMinutes: datesOnly === 0 && Number.isInteger(duration) ? duration : 0,
       bufferMinutes: Number.isInteger(bufferMinutes) ? bufferMinutes : current.buffer_minutes,
-      seatsTotal: Number.isInteger(seatsTotal) && seatsTotal >= 1 && seatsTotal <= 100
-        ? seatsTotal
-        : current.seats_total,
+      seatsTotal:
+        Number.isInteger(seatsTotal) && seatsTotal >= 1 && seatsTotal <= 100
+          ? seatsTotal
+          : current.seats_total,
+      datesOnly,
       locationType,
       locationValue: locationType === "none" ? null : locationValue,
+      imageKey,
       isActive: current.is_active,
       now: nowIso(),
     });
+    await replaceEventDates(
+      c.env.DB,
+      id,
+      dateRows.map((r) => ({ date: r.date, startTime: r.start, endTime: r.end })),
+      nowIso(),
+    );
   } catch (err) {
     if (!String(err).includes("UNIQUE")) throw err;
     return html(
@@ -351,8 +724,10 @@ dashboard.post("/event-types/:id/toggle", async (c) => {
     durationMinutes: current.duration_minutes,
     bufferMinutes: current.buffer_minutes,
     seatsTotal: current.seats_total,
+    datesOnly: current.dates_only,
     locationType: current.location_type,
     locationValue: current.location_value,
+    imageKey: current.image_key,
     isActive: nextActive,
     now: nowIso(),
   });
@@ -384,14 +759,19 @@ dashboard.post("/event-types/:id/delete", async (c) => {
       durationMinutes: current.duration_minutes,
       bufferMinutes: current.buffer_minutes,
       seatsTotal: current.seats_total,
+      datesOnly: current.dates_only,
       locationType: current.location_type,
       locationValue: current.location_value,
+      imageKey: current.image_key,
       isActive: 0,
       now: nowIso(),
     });
     return toastRedirect(c, "/dashboard/event-types", "Event type deactivated");
   } else {
     await deleteEventType(c.env.DB, id, user.id);
+    if (current.image_key) {
+      c.executionCtx.waitUntil(c.env.EVENT_IMAGES.delete(current.image_key));
+    }
     return toastRedirect(c, "/dashboard/event-types", "Event type deleted");
   }
 });
@@ -405,11 +785,11 @@ dashboard.post("/event-types/:id/clone", async (c) => {
   const baseSlug = `${current.slug}-copy`;
   const name = `${current.name.slice(0, 92)} (copy)`;
   const now = nowIso();
-  let cloned = false;
+  let clonedId = 0;
   for (let attempt = 0; attempt < 10; attempt++) {
     const candidate = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
     try {
-      await insertEventType(c.env.DB, {
+      const row = await insertEventType(c.env.DB, {
         userId: user.id,
         name,
         slug: candidate,
@@ -417,20 +797,35 @@ dashboard.post("/event-types/:id/clone", async (c) => {
         durationMinutes: current.duration_minutes,
         bufferMinutes: current.buffer_minutes,
         seatsTotal: current.seats_total,
+        datesOnly: current.dates_only,
         locationType: current.location_type,
         locationValue: current.location_value,
+        imageKey: null,
         now,
       });
-      cloned = true;
+      clonedId = row.id;
       break;
     } catch (err) {
       if (!String(err).includes("UNIQUE")) throw err;
     }
   }
+  // A clone carries the dates too, so a dates-only event copies as a whole.
+  if (clonedId) {
+    await replaceEventDates(
+      c.env.DB,
+      clonedId,
+      (await listEventDates(c.env.DB, id)).map((d) => ({
+        date: d.date,
+        startTime: d.start_time,
+        endTime: d.end_time,
+      })),
+      now,
+    );
+  }
   return toastRedirect(
     c,
     "/dashboard/event-types",
-    cloned ? "Event type cloned" : "Could not clone event type",
+    clonedId ? "Event type cloned" : "Could not clone event type",
   );
 });
 
@@ -486,7 +881,27 @@ dashboard.post("/bookings/:id/cancel", async (c) => {
   } catch (err) {
     if (!(err instanceof BookingError)) throw err;
   }
-  return toastRedirect(c, "/dashboard/bookings", "Appointment cancelled");
+  return toastRedirect(c, "/dashboard/bookings", "Booking cancelled");
+});
+
+/** Door check-in: toggle one seat's redeemed stamp. */
+dashboard.post("/bookings/:id/attendees/:attendeeId/check-in", async (c) => {
+  const user = c.get("user");
+  const bookingId = Number(c.req.param("id"));
+  const attendeeId = Number(c.req.param("attendeeId"));
+  const booking = await getBookingOwned(c.env.DB, bookingId, user.id);
+  if (!booking) return notFound();
+  const attendee = await getAttendeeForBooking(c.env.DB, attendeeId, bookingId);
+  if (!attendee || attendee.status !== "confirmed") return notFound();
+
+  const next = !attendee.checked_in_at;
+  await setAttendeeCheckIn(c.env.DB, attendeeId, bookingId, next, nowIso());
+  if ((c.req.header("accept") ?? "").includes("application/json")) {
+    return c.json({ checked_in: next });
+  }
+  const back = c.req.query("back");
+  const target = back && back.startsWith("/") ? back : "/dashboard/bookings";
+  return toastRedirect(c, target, next ? "Seat checked in" : "Check-in undone");
 });
 
 dashboard.get("/settings", async (c) => {
@@ -560,6 +975,28 @@ pageRoutes.route("/dashboard", dashboard);
 pageRoutes.get("/avatars/:userId/:file", async (c) => {
   const key = `avatars/${c.req.param("userId")}/${c.req.param("file")}`;
   const object = await c.env.AVATARS.get(key);
+  if (!object) return c.notFound();
+
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("etag", object.httpEtag);
+  headers.set("cache-control", "public, max-age=31536000, immutable");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("content-security-policy", "default-src 'none'; sandbox");
+  if (!headers.has("content-type")) headers.set("content-type", "application/octet-stream");
+
+  if (c.req.header("if-none-match") === object.httpEtag) {
+    return new Response(null, { status: 304, headers });
+  }
+  return new Response(object.body, { headers });
+});
+
+/**
+ * Serves event cover images from R2. Same security reasoning as avatars above.
+ */
+pageRoutes.get("/event-images/:userId/:eventTypeId/:file", async (c) => {
+  const key = `event-images/${c.req.param("userId")}/${c.req.param("eventTypeId")}/${c.req.param("file")}`;
+  const object = await c.env.EVENT_IMAGES.get(key);
   if (!object) return c.notFound();
 
   const headers = new Headers();
@@ -728,28 +1165,34 @@ pageRoutes.get("/booking/:id/confirmed", async (c) => {
 });
 
 /** Seat pages: same flow as guest cancel, scoped to one attendee of a group slot. */
-pageRoutes.get("/booking/:id/attendee/:attendeeId/cancel", rateLimit(LIMITS.guestCancel), async (c) => {
-  const token = c.req.query("token") ?? "";
-  try {
-    const { booking, attendee, eventType, host } = await resolveSeatToken(
-      c.env.DB,
-      Number(c.req.param("id")),
-      Number(c.req.param("attendeeId")),
-      token,
-      c.env.SESSION_SECRET,
-    );
-    if (booking.status === "cancelled" || attendee.status !== "confirmed") {
-      return html(seatCancelledPage(host, eventType, await countConfirmedAttendees(c.env.DB, booking.id)));
+pageRoutes.get(
+  "/booking/:id/attendee/:attendeeId/cancel",
+  rateLimit(LIMITS.guestCancel),
+  async (c) => {
+    const token = c.req.query("token") ?? "";
+    try {
+      const { booking, attendee, eventType, host } = await resolveSeatToken(
+        c.env.DB,
+        Number(c.req.param("id")),
+        Number(c.req.param("attendeeId")),
+        token,
+        c.env.SESSION_SECRET,
+      );
+      if (booking.status === "cancelled" || attendee.status !== "confirmed") {
+        return html(
+          seatCancelledPage(host, eventType, await countConfirmedAttendees(c.env.DB, booking.id)),
+        );
+      }
+      if (Date.parse(booking.end_at) <= Date.now()) {
+        return html(cancelUnavailablePage("This meeting has already taken place."), 409);
+      }
+      return html(cancelSeatConfirmPage(host, eventType, booking, attendee, token));
+    } catch (err) {
+      if (err instanceof BookingError) return html(cancelUnavailablePage(err.message), err.status);
+      throw err;
     }
-    if (Date.parse(booking.end_at) <= Date.now()) {
-      return html(cancelUnavailablePage("This meeting has already taken place."), 409);
-    }
-    return html(cancelSeatConfirmPage(host, eventType, booking, attendee, token));
-  } catch (err) {
-    if (err instanceof BookingError) return html(cancelUnavailablePage(err.message), err.status);
-    throw err;
-  }
-});
+  },
+);
 
 pageRoutes.post(
   "/booking/:id/attendee/:attendeeId/cancel",
@@ -850,5 +1293,39 @@ pageRoutes.get("/:username/:eventSlug", async (c) => {
     c.req.param("eventSlug").toLowerCase(),
   );
   if (!eventType) return notFound();
-  return html(bookingPage(host, eventType));
+  // Dates-only types render their sessions server-side: the page already
+  // knows the dates, so the ticket view needs zero client fetches.
+  const sessions: Array<{
+    date: string;
+    startAt: string;
+    endAt: string;
+    seatsLeft: number;
+  }> = [];
+  if (eventType.dates_only === 1) {
+    const today = zonedDateString(new Date(), host.timezone);
+    const rows = (await listEventDates(c.env.DB, eventType.id)).filter((d) => d.date >= today);
+    if (rows.length > 0) {
+      const first = rows[0]!;
+      const last = rows[rows.length - 1]!;
+      const busyRows = await listConfirmedBetween(
+        c.env.DB,
+        host.id,
+        isoUtc(zonedToUtc(first.date, first.start_time, host.timezone)),
+        isoUtc(zonedToUtc(last.date, last.end_time, host.timezone)),
+      );
+      for (const d of rows) {
+        const startAt = isoUtc(zonedToUtc(d.date, d.start_time, host.timezone));
+        const taken = busyRows.find(
+          (b) => b.event_type_id === eventType.id && b.start_at === startAt,
+        );
+        sessions.push({
+          date: d.date,
+          startAt,
+          endAt: isoUtc(zonedToUtc(d.date, d.end_time, host.timezone)),
+          seatsLeft: Math.max(0, eventType.seats_total - (taken?.seats_taken ?? 0)),
+        });
+      }
+    }
+  }
+  return html(bookingPage(host, eventType, undefined, sessions));
 });

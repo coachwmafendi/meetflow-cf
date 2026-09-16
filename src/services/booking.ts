@@ -1,4 +1,5 @@
 import { getEventTypeById, getPublicEventType } from "../db/eventTypes";
+import { listEventDatesForDay } from "../db/eventDates";
 import {
   cancelBooking,
   cancelBookingById,
@@ -22,11 +23,7 @@ import { addMinutes, isoUtc, nowIso, parseIsoUtc } from "../lib/time";
 import { isValidTimeZone, zonedDateString, zonedToUtc } from "../lib/timezone";
 import type { FetchGoogleBusy } from "../lib/googleCalendar";
 import { isEmail, isYmd } from "../lib/validate";
-import {
-  signCancelToken,
-  verifyAttendeeToken,
-  verifyCancelToken,
-} from "../lib/cancelToken";
+import { signCancelToken, verifyAttendeeToken, verifyCancelToken } from "../lib/cancelToken";
 import { getDaySlots } from "./availability";
 import type { BookingAttendeeRow, BookingRow, EventTypeRow, PublicUser } from "../types";
 
@@ -104,13 +101,22 @@ export async function createBooking(
   const nowMs = input.nowMs ?? Date.now();
   if (start.getTime() < nowMs) throw new BookingError("That time is in the past", 422);
 
-  const end = addMinutes(start, eventType.duration_minutes);
-  const startIso = isoUtc(start);
-  const endIso = isoUtc(end);
-
   // Re-derive the host-local date from the instant so the client cannot lie about it.
   const hostDate = zonedDateString(start, host.timezone);
   if (!isYmd(hostDate)) throw new BookingError("Invalid start time", 400);
+
+  const startIso = isoUtc(start);
+  // Dates-only sessions run start_time → end_time of the listed row; weekly
+  // slots are fixed-length. Resolved after the grid check below.
+  const resolveEnd = async (): Promise<Date> => {
+    if (eventType.dates_only !== 1) return addMinutes(start, eventType.duration_minutes);
+    const rows = await listEventDatesForDay(db, eventType.id, hostDate);
+    const row = rows.find(
+      (r) => isoUtc(zonedToUtc(hostDate, r.start_time, host.timezone)) === startIso,
+    );
+    if (!row) throw new BookingError("That time is not available", 422);
+    return zonedToUtc(hostDate, row.end_time, host.timezone);
+  };
 
   // A Google-busy slot can never be booked even if the page was stale.
   const dayStart = zonedToUtc(hostDate, "00:00", host.timezone);
@@ -128,8 +134,9 @@ export async function createBooking(
     hostTimezone: host.timezone,
     eventTypeId: eventType.id,
     durationMinutes: eventType.duration_minutes,
-    bufferMinutes: eventType.buffer_minutes,
+    bufferMinutes: eventType.dates_only === 1 ? 0 : eventType.buffer_minutes,
     seatsTotal: eventType.seats_total,
+    datesOnly: eventType.dates_only,
     dateYmd: hostDate,
     nowMs,
     extraBusy,
@@ -146,6 +153,8 @@ export async function createBooking(
     }
     throw new BookingError("This time slot is no longer available.", 409);
   }
+
+  const endIso = isoUtc(await resolveEnd());
 
   const attendeeInput = {
     bookingId: 0,
@@ -168,7 +177,7 @@ export async function createBooking(
       endAt: endIso,
       timezone: input.guestTimezone,
       notes: input.notes,
-      bufferMinutes: eventType.buffer_minutes,
+      bufferMinutes: eventType.dates_only === 1 ? 0 : eventType.buffer_minutes,
       now: nowIso(),
     });
     if (fresh) {
@@ -185,7 +194,7 @@ export async function createBooking(
     if (!existing) throw new BookingError("This time slot is no longer available.", 409);
     const attendees = await listAttendees(db, existing.id);
     if (attendees.some((a) => a.status === "confirmed" && a.guest_email === guestEmail)) {
-      throw new BookingError("You have already booked this appointment.", 409);
+      throw new BookingError("You have already booked this booking.", 409);
     }
     const attendee = await joinBookingIfSeatsFree(db, { ...attendeeInput, bookingId: existing.id });
     if (!attendee) throw new BookingError("This event is fully booked.", 409);
@@ -201,7 +210,7 @@ export async function createBooking(
     endAt: endIso,
     timezone: input.guestTimezone,
     notes: input.notes,
-    bufferMinutes: eventType.buffer_minutes,
+    bufferMinutes: eventType.dates_only === 1 ? 0 : eventType.buffer_minutes,
     now: nowIso(),
   });
   if (!booking) throw new BookingError("This time slot is no longer available.", 409);
@@ -252,12 +261,23 @@ export async function rescheduleBooking(
   if (start.getTime() < nowMs) throw new BookingError("That time is in the past", 422);
 
   const { host, eventType } = resolved;
-  const end = addMinutes(start, eventType.duration_minutes);
   const startIso = isoUtc(start);
-  const endIso = isoUtc(end);
 
   const hostDate = zonedDateString(start, host.timezone);
   if (!isYmd(hostDate)) throw new BookingError("Invalid start time", 400);
+
+  // Same end semantics as createBooking: dates-only rows span start → end.
+  let endIso: string;
+  if (eventType.dates_only === 1) {
+    const rows = await listEventDatesForDay(db, eventType.id, hostDate);
+    const row = rows.find(
+      (r) => isoUtc(zonedToUtc(hostDate, r.start_time, host.timezone)) === startIso,
+    );
+    if (!row) throw new BookingError("That time is not available", 422);
+    endIso = isoUtc(zonedToUtc(hostDate, row.end_time, host.timezone));
+  } else {
+    endIso = isoUtc(addMinutes(start, eventType.duration_minutes));
+  }
 
   // A Google-busy slot can never be rescheduled into even if the page was stale.
   const dayStart = zonedToUtc(hostDate, "00:00", host.timezone);
@@ -275,8 +295,9 @@ export async function rescheduleBooking(
     hostTimezone: host.timezone,
     eventTypeId: eventType.id,
     durationMinutes: eventType.duration_minutes,
-    bufferMinutes: eventType.buffer_minutes,
+    bufferMinutes: eventType.dates_only === 1 ? 0 : eventType.buffer_minutes,
     seatsTotal: eventType.seats_total,
+    datesOnly: eventType.dates_only,
     dateYmd: hostDate,
     nowMs,
     extraBusy,
@@ -299,7 +320,7 @@ export async function rescheduleBooking(
     timezone: input.guestTimezone,
     notes: resolved.booking.notes,
     now: nowIso(),
-    bufferMinutes: eventType.buffer_minutes,
+    bufferMinutes: eventType.dates_only === 1 ? 0 : eventType.buffer_minutes,
   });
   if (!booking) throw new BookingError("This booking can no longer be rescheduled.", 409);
 
@@ -435,7 +456,7 @@ export async function cancelAttendeeSeat(
   const { attendee, booking } = await resolveSeatToken(db, bookingId, attendeeId, token, secret);
 
   if (booking.status !== "confirmed") {
-    throw new BookingError("This appointment has already been cancelled.", 409);
+    throw new BookingError("This booking has already been cancelled.", 409);
   }
   const now = nowMs ?? Date.now();
   if (Date.parse(booking.end_at) <= now) {

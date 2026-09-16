@@ -32,7 +32,7 @@ describe("pages", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
     const html = await res.text();
-    expect(html).toContain("Take appointments");
+    expect(html).toContain("Take bookings");
     expect(html).toContain("/register");
     expect(html).not.toContain("/vendor/alpine.min.js");
   });
@@ -80,7 +80,7 @@ describe("pages", () => {
     const res = await SELF.fetch("https://example.com/wan/consultation");
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("Confirm appointment");
+    expect(html).toContain("Confirm booking");
     expect(html).toContain('id="page-data"');
     expect(html).toContain("ui-day");
     expect(html).toContain("data-timezone");
@@ -108,9 +108,7 @@ describe("pages", () => {
     expect(html).toContain("Clone");
     expect(html).toContain("Delete");
     expect(html).toContain("ui-menu");
-    expect(html).toContain('data-dialog-open="create-event-type"');
-    expect(html).toContain('id="create-event-type"');
-    expect(html).toContain("Buffer after meeting");
+    expect(html).toContain('href="/dashboard/event-types/new"');
     expect(html).toContain('role="switch"');
     expect(html).toContain('aria-checked="true"');
     expect(html).toContain(`/dashboard/event-types/${eventType.id}/toggle`);

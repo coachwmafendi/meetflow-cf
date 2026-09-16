@@ -60,16 +60,29 @@ const MONTHS = [
 export function profilePage(host: PublicUser, eventTypes: EventTypeRow[]): string {
   const cards = eventTypes
     .map(
-      (e, i) => `<a class="ui-card ui-rise group block p-5 transition-all duration-200
+      (e, i) => `<a class="ui-card ui-rise group block overflow-hidden transition-all duration-200
                      hover:-translate-y-px hover:border-line-strong hover:shadow-md"
              style="animation-delay:${Math.min(i, 8) * 40}ms"
              href="/${escapeHtml(host.slug)}/${escapeHtml(e.slug)}">
-        <div class="flex items-start justify-between gap-4">
+        ${
+          e.image_key
+            ? `<div class="aspect-[21/9] w-full border-b border-line bg-subtle">
+                 <img src="/${escapeHtml(e.image_key)}" alt="" class="h-full w-full object-cover">
+               </div>`
+            : ""
+        }
+        <div class="flex items-start justify-between gap-4 p-5">
           <div class="min-w-0">
             <h2 class="text-sm font-semibold text-ink">${escapeHtml(e.name)}</h2>
-            <p class="mt-1 flex items-center gap-1.5 text-[0.8125rem] text-muted">
-              ${icon("clock", "size-3.5")}<span class="ui-time">${e.duration_minutes} min</span>
-            </p>
+            ${
+              e.dates_only === 1
+                ? `<p class="mt-1 flex items-center gap-1.5 text-[0.8125rem] text-muted">
+                ${icon("calendar", "size-3.5")}<span class="ui-time">Scheduled dates</span>
+              </p>`
+                : `<p class="mt-1 flex items-center gap-1.5 text-[0.8125rem] text-muted">
+                ${icon("clock", "size-3.5")}<span class="ui-time">${e.duration_minutes} min</span>
+              </p>`
+            }
             ${
               e.description
                 ? `<p class="mt-2.5 text-[0.8125rem] leading-relaxed text-muted">${escapeHtml(
@@ -119,7 +132,15 @@ export function bookingPage(
   host: PublicUser,
   eventType: EventTypeRow,
   reschedule?: { bookingId: number; token: string; oldStartAt: string },
+  /** Dates-only types: sessions rendered server-side, zero client fetches. */
+  preloadedSessions: Array<{
+    date: string;
+    startAt: string;
+    endAt: string;
+    seatsLeft: number;
+  }> = [],
 ): string {
+  const isGroup = eventType.seats_total > 1;
   const data = {
     hostSlug: host.slug,
     hostName: host.name,
@@ -128,6 +149,8 @@ export function bookingPage(
     eventName: eventType.name,
     durationMinutes: eventType.duration_minutes,
     seatsTotal: eventType.seats_total,
+    datesOnly: eventType.dates_only === 1,
+    preloadedSessions,
     reschedule: reschedule ?? null,
   };
 
@@ -143,7 +166,7 @@ export function bookingPage(
     body: `
       <div class="mx-auto max-w-5xl ui-rise" x-data="bookingWidget()" x-init="init()">
         <div class="ui-card overflow-hidden shadow-sm">
-          <div class="grid lg:grid-cols-[17rem_minmax(0,1fr)_15rem]">
+          <div class="grid ${isGroup ? "lg:grid-cols-[17rem_minmax(0,1fr)]" : "lg:grid-cols-[17rem_minmax(0,1fr)_15rem]"}">
 
             <!-- Host + event summary -->
             <aside class="border-b border-line p-5 sm:p-6 lg:border-b-0 lg:border-r">
@@ -164,13 +187,35 @@ export function bookingPage(
                 eventType.name,
               )}</h1>
 
-              <div class="mt-3">
-                <span class="ui-badge ui-badge-neutral">
+              ${
+                eventType.image_key
+                  ? `<img src="/${escapeHtml(eventType.image_key)}" alt="" class="mt-3 aspect-video w-full rounded-lg border border-line object-cover">`
+                  : ""
+              }
+
+              <div class="mt-3 flex flex-wrap gap-1.5">
+                ${
+                  eventType.dates_only === 1
+                    ? ""
+                    : `<span class="ui-badge ui-badge-neutral">
                   <span class="ui-time">${eventType.duration_minutes}m</span>
-                </span>
+                </span>`
+                }
+                ${
+                  isGroup
+                    ? `<span class="ui-badge ui-badge-neutral">${eventType.seats_total} seats per session</span>`
+                    : ""
+                }
               </div>
 
-              ${locationHtml(eventType)}
+              ${
+                eventType.location_type !== "none" && eventType.location_value
+                  ? `<div class="mt-3.5">
+                      <p class="ui-label">Location</p>
+                      ${locationHtml(eventType)}
+                    </div>`
+                  : locationHtml(eventType)
+              }
 
               <div class="mt-3.5">
                 <label class="ui-label" for="guest-timezone">Timezone</label>
@@ -206,6 +251,64 @@ export function bookingPage(
               }
             </aside>
 
+            ${
+              isGroup
+                ? `
+            <!-- Ticketed: upcoming sessions, pick one and get a ticket -->
+            <section class="border-b border-line p-5 sm:p-6 lg:border-b-0" x-show="step === 'slot'">
+              <div class="mb-3 flex items-center justify-between gap-2">
+                <p class="text-sm font-semibold text-ink">Upcoming sessions</p>
+                <div class="ui-seg" role="group" aria-label="Time format">
+                  <button type="button" :class="hour12 ? 'ui-seg-active' : ''"
+                          :aria-pressed="hour12 ? 'true' : 'false'"
+                          @click="hour12 = true">12h</button>
+                  <button type="button" :class="!hour12 ? 'ui-seg-active' : ''"
+                          :aria-pressed="!hour12 ? 'true' : 'false'"
+                          @click="hour12 = false">24h</button>
+                </div>
+              </div>
+
+              <div class="space-y-2" x-show="loadingSessions" x-cloak>
+                <template x-for="n in 4" :key="n">
+                  <div class="h-[46px] animate-pulse rounded-md border border-line bg-subtle"></div>
+                </template>
+              </div>
+
+              <div class="max-h-[26rem] space-y-4 overflow-y-auto pr-1"
+                   x-show="!loadingSessions && sessions.length" x-cloak>
+                <template x-for="group in sessionGroups()" :key="group.date">
+                  <div>
+                    <p class="ui-eyebrow mb-1.5" x-text="dayLabel(group.date)"></p>
+                    <div class="space-y-2">
+                      <template x-for="slot in group.slots" :key="slot.startAt">
+                        <button type="button"
+                                class="ui-slot w-full flex-row items-center justify-between gap-3"
+                                :class="slot.seatsLeft <= 0 ? 'cursor-not-allowed opacity-50' : ''"
+                                :disabled="slot.seatsLeft <= 0"
+                                @click="choose(slot)">
+                          <span x-text="sessionLabel(slot)"></span>
+                          <span class="font-sans text-[0.6875rem] font-normal normal-case text-muted"
+                                x-text="seatLabel(slot)"></span>
+                        </button>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+
+              <div x-show="!loadingSessions && !sessions.length" x-cloak
+                   class="rounded-lg border border-dashed border-line-strong px-4 py-8 text-center">
+                <p class="text-sm font-medium text-ink">No sessions scheduled yet</p>
+                <p class="mt-1 text-[0.8125rem] text-muted">Check back soon.</p>
+              </div>
+
+              <div class="mt-3" x-show="!loadingSessions && sessions.length && moreAhead()" x-cloak>
+                <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm w-full"
+                        @click="loadMore()">More dates</button>
+              </div>
+            </section>
+            `
+                : `
             <!-- Step 1a: month calendar -->
             <section class="border-b border-line p-5 sm:p-6 lg:border-b-0" x-show="step === 'slot'">
               <div class="mb-3 flex items-center justify-between">
@@ -245,12 +348,14 @@ export function bookingPage(
                 </template>
               </div>
             </section>
+            `
+            }
 
             <!-- Step 1b: guest details -->
             <section class="border-b border-line p-5 sm:p-6 lg:border-b-0" x-show="step === 'form'" x-cloak>
               <button type="button" @click="step = 'slot'"
                       class="ui-btn ui-btn-ghost ui-btn-sm -ml-2 mb-4">
-                ${icon("arrowLeft", "size-4")}<span>Change time</span>
+                ${icon("arrowLeft", "size-4")}<span x-text="isGroup ? 'Change session' : 'Change time'"></span>
               </button>
 
               <template x-if="error">
@@ -275,11 +380,17 @@ export function bookingPage(
                             placeholder="Anything useful to know beforehand?"></textarea>
                 </div>
                 <button class="ui-btn ui-btn-primary ui-btn-lg" type="submit" :disabled="submitting">
-                  <span x-text="submitting ? 'Booking…' : (reschedule ? 'Confirm new time' : 'Confirm appointment')"></span>
+                  <span x-text="submitting
+                    ? (isGroup ? 'Getting ticket…' : 'Booking…')
+                    : (reschedule ? 'Confirm new time' : (isGroup ? 'Get ticket' : 'Confirm booking'))"></span>
                 </button>
               </form>
             </section>
 
+            ${
+              isGroup
+                ? ""
+                : `
             <!-- Step 2a: time list -->
             <section class="p-5 sm:p-6" x-show="step === 'slot'" x-ref="times">
               <div x-show="!selectedDate">
@@ -326,12 +437,14 @@ export function bookingPage(
                 </div>
               </div>
             </section>
+            `
+            }
 
             <!-- Step 2b: chosen time summary -->
             <section class="p-5 sm:p-6" x-show="step === 'form'" x-cloak>
               <template x-if="selected">
                 <div>
-                  <p class="ui-eyebrow" x-text="reschedule ? 'New time' : 'Your appointment'"></p>
+                  <p class="ui-eyebrow" x-text="reschedule ? 'New time' : (isGroup ? 'Your ticket' : 'Your booking')"></p>
                   <p class="ui-time mt-2 text-base font-semibold text-ink" x-text="summary()"></p>
                   <p class="mt-1 text-[0.8125rem] text-muted" x-text="timezoneLabel"></p>
                 </div>
@@ -342,7 +455,7 @@ export function bookingPage(
         </div>
 
         <p class="mt-4 text-center text-[0.75rem] text-muted">
-          Powered by <span class="font-medium text-body">MeetFlow</span>
+          Powered by <a href="/" class="font-medium text-body hover:text-ink hover:underline">MeetFlow</a>
         </p>
       </div>
 
@@ -392,6 +505,15 @@ export function bookingPage(
             submitting: false,
             monthReq: 0,
             slotReq: 0,
+            // Ticketed events: flat session list instead of calendar + day.
+            sessions: [],
+            loadingSessions: false,
+            scannedMonths: 0,
+            exhausted: false,
+
+            get isGroup() {
+              return this.seatsTotal > 1;
+            },
 
             get timezoneLabel() {
               var zone = this.guestTimezone;
@@ -405,7 +527,151 @@ export function bookingPage(
                 (rest ? ':' + String(rest).padStart(2, '0') : '') + ')';
             },
 
-            init() { this.loadMonth(); },
+            init() {
+              if (!this.isGroup) {
+                this.loadMonth();
+                return;
+              }
+              // Dates-only: sessions came pre-rendered from the server — the
+              // page is instant. Weekly types still scan months client-side.
+              if (this.datesOnly) {
+                this.sessions = (this.preloadedSessions || []).slice();
+                return;
+              }
+              this.initSessions();
+            },
+
+            /** Re-reads seats from the server, e.g. after a 409 on submit. */
+            async refreshSessions() {
+              var self = this;
+              var dates = [];
+              var seen = {};
+              this.sessions.forEach(function (s) {
+                if (!seen[s.date]) {
+                  seen[s.date] = true;
+                  dates.push(s.date);
+                }
+              });
+              if (!dates.length) return;
+              this.loadingSessions = true;
+              var base = '/api/public/' + this.hostSlug + '/' + this.eventSlug + '/slots?date=';
+              var batches = await Promise.all(dates.map(function (date) {
+                return fetch(base + date)
+                  .then(function (r) { return r.ok ? r.json() : { slots: [] }; })
+                  .catch(function () { return { slots: [] }; });
+              }));
+              var fresh = [];
+              batches.forEach(function (body, i) {
+                (body.slots || []).forEach(function (s) {
+                  s.date = dates[i];
+                  fresh.push(s);
+                });
+              });
+              fresh.sort(function (a, b) { return a.startAt < b.startAt ? -1 : 1; });
+              this.sessions = fresh;
+              this.loadingSessions = false;
+            },
+
+            /* ---- Ticketed flow ------------------------------------------------ */
+
+            async initSessions() {
+              this.loadingSessions = true;
+              this.scannedMonths = 0;
+              this.exhausted = false;
+              this.sessions = [];
+              this.viewYear = this.todayYear;
+              this.viewMonth = this.todayMonth;
+              while (this.scannedMonths < 18 && this.sessions.length === 0) {
+                await this.appendMonthSessions();
+                if (this.sessions.length > 0) break;
+                this.advanceMonth();
+              }
+              this.loadingSessions = false;
+            },
+
+            advanceMonth() {
+              this.scannedMonths++;
+              if (this.viewMonth === 11) { this.viewMonth = 0; this.viewYear += 1; }
+              else this.viewMonth += 1;
+            },
+
+            async fetchMonthDays(year, month0) {
+              var url = '/api/public/' + this.hostSlug + '/' + this.eventSlug +
+                '/month?year=' + year + '&month=' + (month0 + 1);
+              try {
+                var res = await fetch(url);
+                return res.ok ? (await res.json()).days : [];
+              } catch (e) {
+                return [];
+              }
+            },
+
+            async appendMonthSessions() {
+              var self = this;
+              var days = await this.fetchMonthDays(this.viewYear, this.viewMonth);
+              var upcoming = days.filter(function (d) { return d >= self.today; });
+              if (!upcoming.length) return;
+              var base = '/api/public/' + this.hostSlug + '/' + this.eventSlug + '/slots?date=';
+              var batches = await Promise.all(upcoming.slice(0, 8).map(function (date) {
+                return fetch(base + date)
+                  .then(function (r) { return r.ok ? r.json() : { slots: [] }; })
+                  .catch(function () { return { slots: [] }; });
+              }));
+              var seen = {};
+              this.sessions.forEach(function (s) { seen[s.startAt] = true; });
+              batches.forEach(function (body, i) {
+                (body.slots || []).forEach(function (s) {
+                  if (seen[s.startAt]) return;
+                  seen[s.startAt] = true;
+                  s.date = upcoming[i];
+                  self.sessions.push(s);
+                });
+              });
+              this.sessions.sort(function (a, b) {
+                return a.startAt < b.startAt ? -1 : 1;
+              });
+            },
+
+            async loadMore() {
+              this.loadingSessions = true;
+              var before = this.sessions.length;
+              this.advanceMonth();
+              await this.appendMonthSessions();
+              this.loadingSessions = false;
+              if (this.sessions.length === before && this.scannedMonths >= 18) this.exhausted = true;
+            },
+
+            moreAhead() {
+              // Weekly types keep scanning up to 18 months; dates-only types
+              // render their full session list up front, so there is never
+              // anything more to load.
+              return !this.datesOnly && !this.exhausted && this.scannedMonths < 18;
+            },
+
+            dayLabel(ymd) {
+              var d = new Date(ymd + 'T12:00:00Z');
+              return d.toLocaleDateString('en-US', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short',
+                timeZone: this.guestTimezone,
+              });
+            },
+
+            sessionGroups() {
+              var groups = [];
+              var byDate = {};
+              this.sessions.forEach(function (s) {
+                if (!byDate[s.date]) {
+                  byDate[s.date] = { date: s.date, slots: [] };
+                  groups.push(byDate[s.date]);
+                }
+                byDate[s.date].slots.push(s);
+              });
+              return groups;
+            },
+
+            /* ---- Private appointment flow ------------------------------------- */
 
             monthName() {
               var names = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -540,9 +806,15 @@ export function bookingPage(
               });
             },
 
+            sessionLabel(slot) {
+              var start = this.label(slot.startAt);
+              return slot.endAt ? start + ' – ' + this.label(slot.endAt) : start;
+            },
+
             seatLabel(slot) {
               if (this.seatsTotal <= 1) return '';
               var left = slot.seatsLeft === undefined ? this.seatsTotal : slot.seatsLeft;
+              if (left <= 0) return 'Full';
               return left === this.seatsTotal
                 ? this.seatsTotal + ' seats'
                 : left === 1 ? '1 seat left' : left + ' seats left';
@@ -586,7 +858,12 @@ export function bookingPage(
               this.error = body.error || 'Something went wrong. Please try again.';
               if (res.status === 409 || res.status === 422) {
                 this.step = 'slot';
-                if (this.selectedDate) this.pickDay(this.selectedDate);
+                if (this.isGroup) {
+                  if (this.datesOnly) this.refreshSessions();
+                  else this.initSessions();
+                } else if (this.selectedDate) {
+                  this.pickDay(this.selectedDate);
+                }
               }
             },
           };
@@ -606,13 +883,13 @@ export function cancelConfirmPage(
   const when = formatBookingWhen(booking);
 
   return layout({
-    title: "Cancel appointment",
+    title: "Cancel booking",
     nav: "none",
     width: "md",
     body: `
       <div class="mx-auto max-w-md ui-rise">
         <div class="ui-card ui-card-pad">
-          <h1 class="text-lg font-semibold tracking-[-0.02em] text-ink">Cancel this appointment?</h1>
+          <h1 class="text-lg font-semibold tracking-[-0.02em] text-ink">Cancel this booking?</h1>
           <p class="mt-1.5 text-[0.8125rem] text-muted">
             This frees the slot for someone else. It cannot be undone — you would need to book again.
           </p>
@@ -628,7 +905,7 @@ export function cancelConfirmPage(
           <div class="mt-6 flex flex-wrap items-center gap-2">
             <form method="post" action="/booking/${booking.id}/cancel">
               <input type="hidden" name="token" value="${escapeHtml(token)}">
-              ${button({ label: "Cancel appointment", variant: "danger" })}
+              ${button({ label: "Cancel booking", variant: "danger" })}
             </form>
             ${button({
               label: "Keep it",
@@ -731,7 +1008,7 @@ export function seatCancelledPage(
 /** Terminal page after a guest cancels, and for an already-cancelled booking. */
 export function cancelledPage(host: PublicUser, eventType: EventTypeRow): string {
   return layout({
-    title: "Appointment cancelled",
+    title: "Booking cancelled",
     nav: "none",
     width: "md",
     body: `
@@ -740,7 +1017,7 @@ export function cancelledPage(host: PublicUser, eventType: EventTypeRow): string
           <span class="mx-auto flex size-11 items-center justify-center rounded-full bg-subtle text-muted">
             ${icon("x", "size-5")}
           </span>
-          <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">Appointment cancelled</h1>
+          <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">Booking cancelled</h1>
           <p class="mt-1.5 text-[0.8125rem] text-muted">
             ${escapeHtml(eventType.name)} with ${escapeHtml(host.name)} has been cancelled.
             ${escapeHtml(host.name)} has been notified.
@@ -824,7 +1101,7 @@ export function confirmationPage(
      </div>`;
 
   return layout({
-    title: "Appointment confirmed",
+    title: "Booking confirmed",
     nav: "none",
     width: "md",
     body: `
@@ -834,7 +1111,7 @@ export function confirmationPage(
             <span class="flex size-11 items-center justify-center rounded-full bg-success-soft text-success">
               ${icon("check", "size-5")}
             </span>
-            <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">Appointment confirmed</h1>
+            <h1 class="mt-4 text-lg font-semibold tracking-[-0.02em] text-ink">Booking confirmed</h1>
             <p class="mt-1 text-[0.8125rem] text-muted">
               ${escapeHtml(eventType.name)} with ${escapeHtml(host.name)}
             </p>
@@ -844,7 +1121,11 @@ export function confirmationPage(
             ${row("Date", `<span class="ui-time">${escapeHtml(dateLine)}</span>`)}
             ${row("Time", `<span class="ui-time font-medium">${escapeHtml(timeLine)}</span>`)}
             ${row("Timezone", escapeHtml(zoneDisplay(booking.timezone)))}
-            ${row("Duration", `<span class="ui-time">${eventType.duration_minutes} min</span>`)}
+            ${
+              eventType.dates_only === 1
+                ? ""
+                : row("Duration", `<span class="ui-time">${eventType.duration_minutes} min</span>`)
+            }
             ${
               eventType.seats_total > 1 && seat
                 ? row("Seats", `${seat.seatsTaken} of ${eventType.seats_total} taken`)
@@ -900,9 +1181,19 @@ export function confirmationPage(
           }
           ${
             seat?.cancelHref
-              ? button({ label: "Cancel my seat", href: seat.cancelHref, variant: "ghost", size: "sm" })
+              ? button({
+                  label: "Cancel my seat",
+                  href: seat.cancelHref,
+                  variant: "ghost",
+                  size: "sm",
+                })
               : cancelHref && eventType.seats_total === 1
-                ? button({ label: "Cancel appointment", href: cancelHref, variant: "ghost", size: "sm" })
+                ? button({
+                    label: "Cancel booking",
+                    href: cancelHref,
+                    variant: "ghost",
+                    size: "sm",
+                  })
                 : ""
           }
         </div>

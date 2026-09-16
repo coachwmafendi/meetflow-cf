@@ -8,6 +8,7 @@
  */
 
 export const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
+export const MAX_EVENT_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export type ImageFormat = "image/png" | "image/jpeg" | "image/webp" | "image/gif";
 
@@ -50,6 +51,15 @@ export function avatarKey(userId: number, format: ImageFormat): string {
   return `avatars/${userId}/${crypto.randomUUID()}.${extensionFor(format)}`;
 }
 
+/**
+ * Object key for an event type cover image. Includes user and event type ids so
+ * orphaned objects are easy to identify and cleanup, and the random filename
+ * busts caches when the image changes.
+ */
+export function eventImageKey(userId: number, eventTypeId: number, format: ImageFormat): string {
+  return `event-images/${userId}/${eventTypeId}/${crypto.randomUUID()}.${extensionFor(format)}`;
+}
+
 export class ImageError extends Error {
   constructor(message: string) {
     super(message);
@@ -61,17 +71,32 @@ export class ImageError extends Error {
 export async function validateAvatar(
   file: unknown,
 ): Promise<{ bytes: Uint8Array; format: ImageFormat }> {
+  return validateImageFile(file, MAX_AVATAR_BYTES, "2 MB");
+}
+
+/** Validates an uploaded event cover image. */
+export async function validateEventImage(
+  file: unknown,
+): Promise<{ bytes: Uint8Array; format: ImageFormat }> {
+  return validateImageFile(file, MAX_EVENT_IMAGE_BYTES, "5 MB");
+}
+
+async function validateImageFile(
+  file: unknown,
+  maxBytes: number,
+  maxLabel: string,
+): Promise<{ bytes: Uint8Array; format: ImageFormat }> {
   if (!(file instanceof File) || file.size === 0) {
     throw new ImageError("Choose an image file to upload.");
   }
-  if (file.size > MAX_AVATAR_BYTES) {
-    throw new ImageError("That image is larger than 2 MB.");
+  if (file.size > maxBytes) {
+    throw new ImageError(`That image is larger than ${maxLabel}.`);
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   // Re-check after reading: `size` is client-reported metadata.
-  if (bytes.byteLength > MAX_AVATAR_BYTES) {
-    throw new ImageError("That image is larger than 2 MB.");
+  if (bytes.byteLength > maxBytes) {
+    throw new ImageError(`That image is larger than ${maxLabel}.`);
   }
 
   const format = sniffImageFormat(bytes);

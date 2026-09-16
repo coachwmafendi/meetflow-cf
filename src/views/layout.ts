@@ -175,7 +175,7 @@ const PALETTE_SCRIPT = `
           items.push({ key: "nav-dashboard", label: "Dashboard", hint: "", href: "/dashboard" });
           items.push({ key: "nav-event-types", label: "Event Types", hint: "", href: "/dashboard/event-types" });
           items.push({ key: "nav-availability", label: "Availability", hint: "", href: "/dashboard/availability" });
-          items.push({ key: "nav-bookings", label: "Appointments", hint: "", href: "/dashboard/bookings" });
+          items.push({ key: "nav-bookings", label: "Bookings", hint: "", href: "/dashboard/bookings" });
           items.push({ key: "nav-settings", label: "Settings", hint: "", href: "/dashboard/settings" });
           if (!this.q.trim()) {
             group("Recent");
@@ -308,7 +308,7 @@ const HOST_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: "grid" },
   { href: "/dashboard/event-types", label: "Event Types", icon: "layers" },
   { href: "/dashboard/availability", label: "Availability", icon: "clock" },
-  { href: "/dashboard/bookings", label: "Appointments", icon: "calendar" },
+  { href: "/dashboard/bookings", label: "Bookings", icon: "calendar" },
 ] as const;
 
 const WIDTHS = { sm: "max-w-md", md: "max-w-3xl", lg: "max-w-5xl", full: "" } as const;
@@ -447,7 +447,7 @@ function hostLayout(options: LayoutOptions, dataScript: string): string {
       <div class="ui-card overflow-hidden p-0">
         <input x-ref="input" x-model="q" @input="onInput()" @keydown="onKeydown($event)"
                type="search" autocomplete="off" aria-label="Search"
-               placeholder="Search appointments, event types, attendees…"
+               placeholder="Search bookings, event types, attendees…"
                class="w-full border-0 bg-transparent px-4 py-3 text-sm text-ink outline-none">
         <div class="max-h-[60vh] overflow-y-auto border-t border-line py-1">
           <template x-for="item in items" :key="item.key">

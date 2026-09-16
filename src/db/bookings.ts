@@ -6,7 +6,7 @@ export interface BusyInterval {
   start_at: string;
   end_at: string;
   event_type_id: number;
-  /** Confirmed attendees on this slot (0 for private appointments). */
+  /** Confirmed attendees on this slot (0 for private bookings). */
   seats_taken: number;
 }
 
@@ -32,7 +32,8 @@ export async function listConfirmedBetween(
   return results;
 }
 
-export interface InsertBookingInput {  userId: number;
+export interface InsertBookingInput {
+  userId: number;
   eventTypeId: number;
   guestName: string;
   guestEmail: string;
@@ -350,4 +351,20 @@ export async function dashboardStats(
     total: total?.results[0]?.n ?? 0,
     activeEventTypes: active?.results[0]?.n ?? 0,
   };
+}
+
+/** Every confirmed slot booked on one event type — the ticket manager's sessions. */
+export async function listConfirmedBookingsForEventType(
+  db: D1Database,
+  eventTypeId: number,
+): Promise<BookingRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT b.* FROM bookings b
+        WHERE b.event_type_id = ? AND b.status = 'confirmed'
+        ORDER BY b.start_at, b.id`,
+    )
+    .bind(eventTypeId)
+    .all<BookingRow>();
+  return results;
 }

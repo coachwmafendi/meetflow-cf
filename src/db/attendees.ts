@@ -132,9 +132,7 @@ export async function listAttendees(
   bookingId: number,
 ): Promise<BookingAttendeeRow[]> {
   const { results } = await db
-    .prepare(
-      `SELECT * FROM booking_attendees WHERE booking_id = ? ORDER BY created_at, id`,
-    )
+    .prepare(`SELECT * FROM booking_attendees WHERE booking_id = ? ORDER BY created_at, id`)
     .bind(bookingId)
     .all<BookingAttendeeRow>();
   return results;
@@ -144,9 +142,7 @@ export function listConfirmedAttendees(
   db: D1Database,
   bookingId: number,
 ): Promise<BookingAttendeeRow[]> {
-  return listAttendees(db, bookingId).then((rows) =>
-    rows.filter((r) => r.status === "confirmed"),
-  );
+  return listAttendees(db, bookingId).then((rows) => rows.filter((r) => r.status === "confirmed"));
 }
 
 export async function getAttendeeById(
@@ -185,10 +181,29 @@ export async function cancelAttendee(
   return (res.meta.changes ?? 0) > 0;
 }
 
-export async function countConfirmedAttendees(
+/**
+ * Door check-in: stamps (or clears) checked_in_at on one confirmed seat.
+ * Scoped to the booking so a forged attendee id from another slot is a no-op.
+ */
+export async function setAttendeeCheckIn(
   db: D1Database,
+  attendeeId: number,
   bookingId: number,
-): Promise<number> {
+  checkedIn: boolean,
+  now: string,
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE booking_attendees
+          SET checked_in_at = ?, updated_at = ?
+        WHERE id = ? AND booking_id = ? AND status = 'confirmed'`,
+    )
+    .bind(checkedIn ? now : null, now, attendeeId, bookingId)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+export async function countConfirmedAttendees(db: D1Database, bookingId: number): Promise<number> {
   const row = await db
     .prepare(
       `SELECT COUNT(*) AS n FROM booking_attendees WHERE booking_id = ? AND status = 'confirmed'`,
@@ -211,4 +226,22 @@ export async function cancelAllAttendees(
     )
     .bind(now, bookingId)
     .run();
+}
+
+/** All guests across every confirmed slot of one event type, session-annotated. */
+export async function listAttendeesForEventType(
+  db: D1Database,
+  eventTypeId: number,
+): Promise<Array<BookingAttendeeRow & { session_start: string }>> {
+  const { results } = await db
+    .prepare(
+      `SELECT a.*, b.start_at AS session_start
+         FROM booking_attendees a
+         JOIN bookings b ON b.id = a.booking_id
+        WHERE b.event_type_id = ? AND b.status = 'confirmed'
+        ORDER BY b.start_at, a.created_at, a.id`,
+    )
+    .bind(eventTypeId)
+    .all<BookingAttendeeRow & { session_start: string }>();
+  return results;
 }

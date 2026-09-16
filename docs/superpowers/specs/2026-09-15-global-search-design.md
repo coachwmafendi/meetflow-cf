@@ -52,9 +52,18 @@ palette (Cal.com-style).
 
 ```json
 {
-  "bookings":   [{ "id": 1, "guestName": "Ahmad", "guestEmail": "a@b.co", "startAt": "…", "status": "confirmed", "eventTypeName": "Consultation" }],
+  "bookings": [
+    {
+      "id": 1,
+      "guestName": "Ahmad",
+      "guestEmail": "a@b.co",
+      "startAt": "…",
+      "status": "confirmed",
+      "eventTypeName": "Consultation"
+    }
+  ],
   "eventTypes": [{ "id": 2, "name": "Consultation", "slug": "consultation", "isActive": 1 }],
-  "attendees":  [{ "bookingId": 1, "guestName": "Sara", "guestEmail": "s@b.co" }]
+  "attendees": [{ "bookingId": 1, "guestName": "Sara", "guestEmail": "s@b.co" }]
 }
 ```
 

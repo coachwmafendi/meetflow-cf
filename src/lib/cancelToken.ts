@@ -74,10 +74,7 @@ export async function signAttendeeToken(attendeeId: number, secret: string): Pro
 }
 
 /** Returns the attendee id the token authorises, or null. */
-export async function verifyAttendeeToken(
-  token: string,
-  secret: string,
-): Promise<number | null> {
+export async function verifyAttendeeToken(token: string, secret: string): Promise<number | null> {
   const payload = await verifyPayload(ATTENDEE_PURPOSE, token, secret);
   if (payload === null) return null;
   const attendeeId = Number(payload);

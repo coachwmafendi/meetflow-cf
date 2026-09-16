@@ -1,4 +1,5 @@
 import { listRules, listRulesForDay } from "../db/availability";
+import { listEventDates, listEventDatesBetween, listEventDatesForDay } from "../db/eventDates";
 import { listConfirmedBetween, type BusyInterval } from "../db/bookings";
 import {
   generateSlotStarts,
@@ -8,7 +9,7 @@ import {
   type Interval,
   type MinuteWindow,
 } from "../lib/slots";
-import { addMinutes, isoUtc } from "../lib/time";
+import { isoUtc } from "../lib/time";
 import { dayOfWeek, zonedDateString, zonedToUtc } from "../lib/timezone";
 
 /**
@@ -82,6 +83,8 @@ export interface SlotQuery {
   bufferMinutes: number;
   /** Guests per slot for this event type (1 = private). */
   seatsTotal?: number;
+  /** 1 = slots come only from the event type's listed dates. */
+  datesOnly?: number;
   dateYmd: string;
   nowMs: number;
   /** Google Calendar busy intervals supplied by the caller (feature off = absent). */
@@ -96,6 +99,8 @@ export interface MonthQuery {
   bufferMinutes: number;
   /** Guests per slot for this event type (1 = private). */
   seatsTotal?: number;
+  /** 1 = slots come only from the event type's listed dates. */
+  datesOnly?: number;
   /** 1-12 */
   month: number;
   year: number;
@@ -134,20 +139,30 @@ export async function getSlotsForDate(db: D1Database, q: SlotQuery): Promise<Slo
 export async function getDaySlots(db: D1Database, q: SlotQuery): Promise<DaySlots> {
   const empty: DaySlots = { grid: [], free: [] };
 
-  const rules = await listRulesForDay(db, q.hostId, dayOfWeek(q.dateYmd));
-  if (rules.length === 0) return empty;
-
-  const windows = rules.map((r) => ({
-    start: toMinutes(r.start_time),
-    end: toMinutes(r.end_time),
-  }));
-  const startMinutes = generateSlotStarts(windows, q.durationMinutes);
-  if (startMinutes.length === 0) return empty;
-
-  const candidates: Interval[] = startMinutes.map((minutes) => {
-    const start = zonedToUtc(q.dateYmd, toHhmm(minutes), q.hostTimezone);
-    return { startMs: start.getTime(), endMs: start.getTime() + q.durationMinutes * 60_000 };
-  });
+  // Dates-only types treat each listed date as ONE session spanning its
+  // start_time → end_time — the row IS the event, not an availability window.
+  // Weekly types expand rules into slots on the event's duration interval.
+  let candidates: Interval[];
+  if (q.datesOnly) {
+    const rows = await listEventDatesForDay(db, q.eventTypeId, q.dateYmd);
+    if (rows.length === 0) return empty;
+    candidates = rows.map((r) => ({
+      startMs: zonedToUtc(q.dateYmd, r.start_time, q.hostTimezone).getTime(),
+      endMs: zonedToUtc(q.dateYmd, r.end_time, q.hostTimezone).getTime(),
+    }));
+  } else {
+    const windows = (await listRulesForDay(db, q.hostId, dayOfWeek(q.dateYmd))).map((r) => ({
+      start: toMinutes(r.start_time),
+      end: toMinutes(r.end_time),
+    }));
+    if (windows.length === 0) return empty;
+    const startMinutes = generateSlotStarts(windows, q.durationMinutes);
+    if (startMinutes.length === 0) return empty;
+    candidates = startMinutes.map((minutes) => {
+      const start = zonedToUtc(q.dateYmd, toHhmm(minutes), q.hostTimezone);
+      return { startMs: start.getTime(), endMs: start.getTime() + q.durationMinutes * 60_000 };
+    });
+  }
 
   const dayStart = candidates[0]!.startMs;
   const dayEnd = candidates[candidates.length - 1]!.endMs;
@@ -157,14 +172,17 @@ export async function getDaySlots(db: D1Database, q: SlotQuery): Promise<DaySlot
     isoUtc(new Date(dayStart)),
     isoUtc(new Date(dayEnd)),
   );
+  // Dates-only rows define exact session times — never pad them with the
+  // buffer, or back-to-back sessions on the same day would block each other.
+  const buffer = q.datesOnly ? 0 : q.bufferMinutes;
   const busy = [
-    ...busyIntervals(busyRows, q.eventTypeId, q.bufferMinutes),
+    ...busyIntervals(busyRows, q.eventTypeId, buffer),
     ...(q.extraBusy ?? []).map((b) => ({ ...b, bookingId: 0 })),
   ];
 
   const toSlot = (slot: Interval & { seatsLeft?: number }): Slot => ({
     startAt: isoUtc(new Date(slot.startMs)),
-    endAt: isoUtc(addMinutes(new Date(slot.startMs), q.durationMinutes)),
+    endAt: isoUtc(new Date(slot.endMs)),
     ...(slot.seatsLeft !== undefined && q.seatsTotal !== undefined && q.seatsTotal > 1
       ? { seatsLeft: slot.seatsLeft }
       : {}),
@@ -190,34 +208,64 @@ export async function getMonthFreeDays(db: D1Database, q: MonthQuery): Promise<s
   const todayYmd = zonedDateString(new Date(q.nowMs), q.hostTimezone);
   if (lastDayYmd < todayYmd) return [];
 
-  const rules = await listRules(db, q.hostId);
-  if (rules.length === 0) return [];
-
-  const windowsByDow = new Map<number, MinuteWindow[]>();
-  for (const r of rules) {
-    const list = windowsByDow.get(r.day_of_week) ?? [];
-    list.push({ start: toMinutes(r.start_time), end: toMinutes(r.end_time) });
-    windowsByDow.set(r.day_of_week, list);
-  }
-
+  // Dates-only types open exactly on their listed dates, each date ONE session
+  // spanning start_time → end_time. Weekly types expand rules into slots.
   const byDate = new Map<string, Interval[]>();
   let minMs = Infinity;
   let maxMs = -Infinity;
-  for (let day = 1; day <= daysInMonth; day++) {
-    const ymd = `${q.year}-${pad2(q.month)}-${pad2(day)}`;
-    const windows = windowsByDow.get(dayOfWeek(ymd));
-    if (!windows || windows.length === 0) continue;
-    const starts = generateSlotStarts(windows, q.durationMinutes);
-    if (starts.length === 0) continue;
-    const slots: Interval[] = starts.map((minutes) => {
-      const start = zonedToUtc(ymd, toHhmm(minutes), q.hostTimezone);
-      return { startMs: start.getTime(), endMs: start.getTime() + q.durationMinutes * 60_000 };
-    });
-    minMs = Math.min(minMs, slots[0]!.startMs);
-    maxMs = Math.max(maxMs, slots[slots.length - 1]!.endMs);
-    byDate.set(ymd, slots);
+  if (q.datesOnly) {
+    const dates = await listEventDatesBetween(
+      db,
+      q.eventTypeId,
+      `${q.year}-${pad2(q.month)}-01`,
+      lastDayYmd,
+    );
+    for (const d of dates) {
+      const list = byDate.get(d.date) ?? [];
+      list.push({
+        startMs: zonedToUtc(d.date, d.start_time, q.hostTimezone).getTime(),
+        endMs: zonedToUtc(d.date, d.end_time, q.hostTimezone).getTime(),
+      });
+      byDate.set(d.date, list);
+    }
+    if (byDate.size === 0) return [];
+    for (const slots of byDate.values()) {
+      minMs = Math.min(minMs, slots[0]!.startMs);
+      maxMs = Math.max(maxMs, slots[slots.length - 1]!.endMs);
+    }
+  } else {
+    const rules = await listRules(db, q.hostId);
+    if (rules.length === 0) return [];
+
+    const windowsByDow = new Map<number, MinuteWindow[]>();
+    for (const r of rules) {
+      const list = windowsByDow.get(r.day_of_week) ?? [];
+      list.push({ start: toMinutes(r.start_time), end: toMinutes(r.end_time) });
+      windowsByDow.set(r.day_of_week, list);
+    }
+
+    const windowsByDate = new Map<string, MinuteWindow[]>();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const ymd = `${q.year}-${pad2(q.month)}-${pad2(day)}`;
+      const windows = windowsByDow.get(dayOfWeek(ymd));
+      if (!windows || windows.length === 0) continue;
+      windowsByDate.set(ymd, windows);
+    }
+    if (windowsByDate.size === 0) return [];
+
+    for (const [ymd, windows] of windowsByDate) {
+      const starts = generateSlotStarts(windows, q.durationMinutes);
+      if (starts.length === 0) continue;
+      const slots: Interval[] = starts.map((minutes) => {
+        const start = zonedToUtc(ymd, toHhmm(minutes), q.hostTimezone);
+        return { startMs: start.getTime(), endMs: start.getTime() + q.durationMinutes * 60_000 };
+      });
+      minMs = Math.min(minMs, slots[0]!.startMs);
+      maxMs = Math.max(maxMs, slots[slots.length - 1]!.endMs);
+      byDate.set(ymd, slots);
+    }
+    if (byDate.size === 0) return [];
   }
-  if (byDate.size === 0) return [];
 
   const busyRows = await listConfirmedBetween(
     db,
@@ -225,8 +273,9 @@ export async function getMonthFreeDays(db: D1Database, q: MonthQuery): Promise<s
     isoUtc(new Date(minMs)),
     isoUtc(new Date(maxMs)),
   );
+  // Same rule as getDaySlots: dates-only session times are exact.
   const busy = [
-    ...busyIntervals(busyRows, q.eventTypeId, q.bufferMinutes),
+    ...busyIntervals(busyRows, q.eventTypeId, q.datesOnly ? 0 : q.bufferMinutes),
     ...(q.extraBusy ?? []).map((b) => ({ ...b, bookingId: 0 })),
   ];
 

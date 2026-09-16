@@ -58,7 +58,7 @@ describe("guest cancellation link", () => {
     const res = await get(`/booking/${bookingId}/cancel?token=${encodeURIComponent(token)}`);
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("Cancel this appointment?");
+    expect(html).toContain("Cancel this booking?");
     expect(html).toContain("Consultation");
   });
 
@@ -77,7 +77,7 @@ describe("guest cancellation link", () => {
 
     const res = await post(`/booking/${bookingId}/cancel`, token);
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain("Appointment cancelled");
+    expect(await res.text()).toContain("Booking cancelled");
     expect(await statusOf(bookingId)).toBe("cancelled");
 
     const slots = await api("/api/public/wan/consultation/slots?date=2026-09-21");
@@ -136,7 +136,7 @@ describe("guest cancellation link", () => {
     await post(`/booking/${bookingId}/cancel`, token);
     const again = await post(`/booking/${bookingId}/cancel`, token);
     expect(again.status).toBe(200);
-    expect(await again.text()).toContain("Appointment cancelled");
+    expect(await again.text()).toContain("Booking cancelled");
   });
 
   it("shows the cancelled page when following the link after cancelling", async () => {
@@ -146,7 +146,7 @@ describe("guest cancellation link", () => {
 
     const res = await get(`/booking/${bookingId}/cancel?token=${encodeURIComponent(token)}`);
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain("Appointment cancelled");
+    expect(await res.text()).toContain("Booking cancelled");
   });
 
   it("refuses to cancel a meeting that already happened", async () => {
@@ -168,6 +168,6 @@ describe("guest cancellation link", () => {
     const res = await get(`/booking/${bookingId}/confirmed`);
     const html = await res.text();
     expect(html).toContain(`/booking/${bookingId}/cancel?token=`);
-    expect(html).toContain("Cancel appointment");
+    expect(html).toContain("Cancel booking");
   });
 });

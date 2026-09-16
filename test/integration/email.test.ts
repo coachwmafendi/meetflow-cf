@@ -78,7 +78,7 @@ describe("email jobs", () => {
     );
 
     expect(sent[0]!.to).toEqual(["wan@example.com"]);
-    expect(sent[0]!.subject).toBe("New appointment: Ahmad — Consultation");
+    expect(sent[0]!.subject).toBe("New booking: Ahmad — Consultation");
     expect(sent[0]!.reply_to).toBe("ahmad@example.com");
   });
 

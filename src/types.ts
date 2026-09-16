@@ -29,13 +29,17 @@ export interface EventTypeRow {
   duration_minutes: number;
   /** Minutes of gap left after each booking of this type (0 = none). */
   buffer_minutes: number;
-  /** Guests a single slot can hold. 1 = private appointment; N > 1 = group. */
+  /** Guests a single slot can hold. 1 = private booking; N > 1 = group. */
   seats_total: number;
+  /** 1 = slots come only from this type's event_dates; weekly rules are ignored. */
+  dates_only: number;
   is_active: number;
   /** "none" | "google_meet" | "zoom" | "in_person" | "phone" */
   location_type: string;
   /** Meet/Zoom URL, street address, or phone number; null when unset. */
   location_value: string | null;
+  /** R2 object key for the event cover image, or null when unset. */
+  image_key: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -47,6 +51,18 @@ export interface AvailabilityRuleRow {
   start_time: string;
   end_time: string;
   is_active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One open date of a dates-only event type, in the HOST's timezone. */
+export interface EventDateRow {
+  id: number;
+  event_type_id: number;
+  /** YYYY-MM-DD in the host's timezone. */
+  date: string;
+  start_time: string;
+  end_time: string;
   created_at: string;
   updated_at: string;
 }
@@ -81,6 +97,8 @@ export interface BookingAttendeeRow {
   status: AttendeeStatus;
   /** Human-presentable ticket code (MF-XXXX-XXXX), null for legacy rows. */
   ticket_code: string | null;
+  /** When the host verified this ticket at the door; null = not yet. */
+  checked_in_at: string | null;
   created_at: string;
   updated_at: string;
 }

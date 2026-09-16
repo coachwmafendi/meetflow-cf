@@ -3,17 +3,18 @@ import { TIMEZONE_SCRIPT, timezoneSelect } from "./timezoneSelect";
 import { alert, button, field, icon } from "./ui";
 
 /** Password field with a show/hide eye toggle (Alpine, no extra JS). */
-function passwordField(options: { hint?: string; attrsHtml?: string } = {}): string {
+function passwordField(options: { name?: string; hint?: string; attrsHtml?: string } = {}): string {
+  const name = options.name ?? "password";
   return `<div class="ui-fieldset">
-      <label class="ui-label" for="password">Password</label>
+      <label class="ui-label" for="${name}">Password</label>
       <div class="relative" x-data="{ show: false }">
-        <input class="ui-input pr-10" id="password" name="password"
+        <input class="ui-input pr-10" id="${name}" name="${name}"
                :type="show ? 'text' : 'password'" required ${options.attrsHtml ?? ""}
                ${options.hint ? 'aria-describedby="password-hint"' : ""}>
         <button type="button"
                 class="absolute inset-y-0 right-0 flex items-center px-3 text-muted transition-colors hover:text-ink"
                 :aria-label="show ? 'Hide password' : 'Show password'"
-                aria-controls="password" @click="show = !show">
+                aria-controls="${name}" @click="show = !show">
           <span x-show="!show">${icon("eye", "size-4")}</span>
           <span x-show="show" x-cloak>${icon("eyeOff", "size-4")}</span>
         </button>
@@ -123,14 +124,61 @@ export function loginPage(error?: string): string {
       <form class="space-y-4" method="post" action="/login">
         ${field({ name: "email", label: "Email", type: "email", placeholder: "you@example.com" })}
         ${passwordField()}
-        <div class="pt-1">${button({
-          label: "Sign in",
-          variant: "primary",
-          size: "lg",
-          type: "submit",
-        })}</div>
-      </form>`,
+        <div class="flex items-center justify-between pt-1">
+          <span></span>
+          ${button({
+            label: "Sign in",
+            variant: "primary",
+            size: "lg",
+            type: "submit",
+          })}
+        </div>
+      </form>
+      <p class="mt-4 text-center text-[0.8125rem] text-muted">
+        <a class="font-medium text-ink underline underline-offset-4 hover:text-primary-hover" href="/forgot-password">Forgot password?</a>
+      </p>`,
     footerHtml: `No account? <a class="font-medium text-ink underline underline-offset-4 hover:text-primary-hover" href="/register">Create one</a>`,
+  });
+}
+
+/** Step 1: ask for the account email; the response never reveals existence. */
+export function forgotPasswordPage(error?: string): string {
+  return authShell({
+    title: "Reset password",
+    heading: "Reset your password",
+    blurb: "Enter your email and we will send you a reset link.",
+    error,
+    formHtml: `
+      <form class="space-y-4" method="post" action="/forgot-password">
+        ${field({ name: "email", label: "Email", type: "email", placeholder: "you@example.com" })}
+        <div class="pt-1">${button({ label: "Send reset link", variant: "primary", size: "lg", type: "submit" })}</div>
+      </form>`,
+    footerHtml: `Remembered it? <a class="font-medium text-ink underline underline-offset-4 hover:text-primary-hover" href="/login">Sign in</a>`,
+  });
+}
+
+/** Step 2: the signed link lands here with a new-password form. */
+export function resetPasswordPage(error?: string, token = ""): string {
+  return authShell({
+    title: "Choose a new password",
+    heading: "Choose a new password",
+    blurb: "Pick something at least 8 characters long.",
+    error,
+    formHtml: `
+      <form class="space-y-4" method="post" action="/reset-password">
+        <input type="hidden" name="token" value="${escapeHtml(token)}">
+        ${passwordField({
+          name: "password",
+          attrsHtml: 'minlength="8" autocomplete="new-password"',
+        })}
+        ${passwordField({
+          name: "password_confirm",
+          hint: "Type it once more.",
+          attrsHtml: 'autocomplete="new-password"',
+        })}
+        <div class="pt-1">${button({ label: "Save password", variant: "primary", size: "lg", type: "submit" })}</div>
+      </form>`,
+    footerHtml: `Back to <a class="font-medium text-ink underline underline-offset-4 hover:text-primary-hover" href="/login">sign in</a>`,
   });
 }
 

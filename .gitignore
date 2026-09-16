@@ -4,3 +4,17 @@ public/app.css
 .dev.vars
 .DS_Store
 .worktrees/
+
+# Playwright / MCP generated state
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# Screenshot artifacts generated during dev/preview
+*-desktop.png
+*-mobile.png
+*-live.png
+embed-*.png
+cal-*.png
+meetflow-*.png
+landing-*.png
