@@ -304,8 +304,8 @@ function descriptionField(value: string): string {
 
 const LOCATION_OPTIONS = [
   { value: "none", label: "No location", icon: "locationNone" },
-  { value: "google_meet", label: "Google Meet", icon: "video" },
-  { value: "zoom", label: "Zoom", icon: "video" },
+  { value: "google_meet", label: "Google Meet", icon: "googleMeet" },
+  { value: "zoom", label: "Zoom", icon: "zoom" },
   { value: "in_person", label: "In person", icon: "mapPin" },
   { value: "phone", label: "Phone", icon: "phone" },
 ] as const;
