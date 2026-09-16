@@ -2258,7 +2258,7 @@ export function settingsPage(
                            ${button({ label: "Disconnect", variant: "ghost", size: "sm" })}
                          </form>`
                       : `<a class="ui-btn ui-btn-secondary ui-btn-sm" href="/oauth/google/authorize">
-                           ${icon("calendar", "size-4")}<span>Connect Google Calendar</span>
+                            ${icon("googleCalendar", "size-5")}<span>Connect Google Calendar</span>
                          </a>`
                   }
                 </div>
