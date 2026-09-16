@@ -1,5 +1,6 @@
 import { zoneLabel } from "../lib/timezoneList";
 import { escapeHtml } from "./layout";
+import { icon } from "./ui";
 
 export interface TimezoneSelectOptions {
   /** Form field name. */
@@ -15,29 +16,37 @@ export interface TimezoneSelectOptions {
 }
 
 /**
- * Renders a timezone `<select>` holding only the current value.
+ * Renders a searchable timezone combobox.
  *
- * The full IANA list is filled in by TIMEZONE_SCRIPT in the browser, not here:
- * labelling all 418 zones needs one Intl.DateTimeFormat per zone, which measured
- * at ~95ms of CPU — far past a Worker's per-request budget. The browser does the
- * same work off the critical path for free.
- *
- * Without JavaScript the control still shows and submits the saved zone
- * correctly; it just cannot be changed from this page.
+ * A hidden native `<select>` still exists for form submission and no-JS
+ * fallbacks. The visible dropdown is built by TIMEZONE_SCRIPT in the browser and
+ * includes a search input that filters by city or IANA zone.
  */
 export function timezoneSelect({ name, selected, autodetect }: TimezoneSelectOptions): string {
   const id = escapeHtml(name);
+  const initialLabel = escapeHtml(zoneLabel(selected));
   return `
-    <select class="ui-select" id="${id}" name="${id}" data-timezone${
-      autodetect ? " data-timezone-autodetect" : ""
-    } required>
-      <option value="${escapeHtml(selected)}" selected>${escapeHtml(zoneLabel(selected))}</option>
-    </select>`;
+    <div class="relative" data-tz-select>
+      <button type="button" class="ui-input flex w-full items-center justify-between gap-2 text-left" data-tz-trigger aria-haspopup="listbox" aria-expanded="false">
+        <span data-tz-label>${initialLabel}</span>
+        ${icon("chevronDown", "size-4 text-muted")}
+      </button>
+      <div class="absolute z-20 mt-1 hidden w-full overflow-hidden rounded-md border border-line-strong bg-surface shadow-lg" data-tz-dropdown>
+        <input type="text" class="block w-full border-b border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted focus:outline-none" placeholder="Search timezone or city…" data-tz-search>
+        <div class="max-h-[16rem] overflow-y-auto" data-tz-list role="listbox"></div>
+      </div>
+      <select class="sr-only" id="${id}" name="${id}" data-timezone${
+        autodetect ? " data-timezone-autodetect" : ""
+      } required>
+        <option value="${escapeHtml(selected)}" selected>${initialLabel}</option>
+      </select>
+    </div>`;
 }
 
 /**
- * Populates every `[data-timezone]` select with the runtime's full zone list,
- * sorted by current UTC offset then city, labelled "+08:00 Kuala Lumpur".
+ * Turns every `[data-timezone]` hidden select into a searchable combobox.
+ * The full IANA list is built in the browser, sorted by current UTC offset
+ * then city, labelled "+08:00 Kuala Lumpur".
  *
  * The offset maths mirrors src/lib/timezone.ts. It is duplicated rather than
  * imported because this runs in the browser, not the Worker.
@@ -88,33 +97,124 @@ export const TIMEZONE_SCRIPT = `
       var detected = "";
       try { detected = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
 
-      Array.prototype.forEach.call(selects, function (select) {
+      function initOne(select) {
+        var wrapper = select.closest("[data-tz-select]");
+        var trigger = wrapper.querySelector("[data-tz-trigger]");
+        var dropdown = wrapper.querySelector("[data-tz-dropdown]");
+        var list = wrapper.querySelector("[data-tz-list]");
+        var search = wrapper.querySelector("[data-tz-search]");
+        var labelEl = wrapper.querySelector("[data-tz-label]");
+
         var want = select.hasAttribute("data-timezone-autodetect") && detected
           ? detected
           : select.value;
 
-        var fragment = document.createDocumentFragment();
+        var selectFragment = document.createDocumentFragment();
         var matched = false;
+        var buttons = [];
+
+        function setValue(value) {
+          select.value = value;
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          updateTrigger();
+          close();
+        }
+
+        function updateTrigger() {
+          var opt = select.querySelector('option[value="' + select.value + '"]');
+          labelEl.textContent = opt ? opt.textContent : select.value;
+        }
+
+        function renderButton(item, active) {
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "flex w-full items-center justify-between px-3 py-2 text-left text-sm " + (active ? "bg-subtle text-ink" : "text-body hover:bg-subtle hover:text-ink");
+          btn.setAttribute("role", "option");
+          btn.setAttribute("aria-selected", active ? "true" : "false");
+          btn.setAttribute("data-tz-value", item.value);
+          btn.textContent = item.text;
+          return btn;
+        }
+
         items.forEach(function (item) {
+          var active = item.value === want;
+          if (active) matched = true;
+
           var option = document.createElement("option");
           option.value = item.value;
           option.textContent = item.text;
-          if (item.value === want) { option.selected = true; matched = true; }
-          fragment.appendChild(option);
+          if (active) option.selected = true;
+          selectFragment.appendChild(option);
+
+          var btn = renderButton(item, active);
+          buttons.push(btn);
+          list.appendChild(btn);
         });
 
-        // Keep an unrecognised stored value selectable rather than silently
-        // rewriting the host's timezone on the next save.
         if (!matched && want) {
-          var keep = document.createElement("option");
-          keep.value = want;
-          keep.textContent = want;
-          keep.selected = true;
-          fragment.insertBefore(keep, fragment.firstChild);
+          var option = document.createElement("option");
+          option.value = want;
+          option.textContent = want;
+          option.selected = true;
+          selectFragment.insertBefore(option, selectFragment.firstChild);
+
+          var btn = renderButton({ value: want, text: want }, true);
+          list.insertBefore(btn, list.firstChild);
         }
 
         select.innerHTML = "";
-        select.appendChild(fragment);
-      });
+        select.appendChild(selectFragment);
+        updateTrigger();
+
+        function open() {
+          dropdown.classList.remove("hidden");
+          trigger.setAttribute("aria-expanded", "true");
+          search.value = "";
+          search.focus();
+          buttons.forEach(function (btn) { btn.style.display = ""; });
+        }
+
+        function close() {
+          dropdown.classList.add("hidden");
+          trigger.setAttribute("aria-expanded", "false");
+        }
+
+        trigger.addEventListener("click", function (e) {
+          e.preventDefault();
+          if (dropdown.classList.contains("hidden")) open(); else close();
+        });
+
+        search.addEventListener("input", function () {
+          var q = search.value.toLowerCase();
+          buttons.forEach(function (btn) {
+            var value = btn.getAttribute("data-tz-value").toLowerCase();
+            var text = btn.textContent.toLowerCase();
+            btn.style.display = (value.indexOf(q) !== -1 || text.indexOf(q) !== -1) ? "" : "none";
+          });
+        });
+
+        search.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") { close(); trigger.focus(); }
+        });
+
+        list.addEventListener("click", function (e) {
+          var btn = e.target.closest("[data-tz-value]");
+          if (!btn) return;
+          list.querySelectorAll("[data-tz-value]").forEach(function (b) {
+            var active = b === btn;
+            b.setAttribute("aria-selected", active ? "true" : "false");
+            b.className = active
+              ? "flex w-full items-center justify-between px-3 py-2 text-left text-sm bg-subtle text-ink"
+              : "flex w-full items-center justify-between px-3 py-2 text-left text-sm text-body hover:bg-subtle hover:text-ink";
+          });
+          setValue(btn.getAttribute("data-tz-value"));
+        });
+
+        document.addEventListener("click", function (e) {
+          if (!wrapper.contains(e.target)) close();
+        });
+      }
+
+      Array.prototype.forEach.call(selects, initOne);
     })();
   </script>`;
