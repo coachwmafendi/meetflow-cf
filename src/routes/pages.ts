@@ -295,14 +295,19 @@ function parseEventTypeForm(form: Record<string, string | File>): {
   locationValue: string;
   dateRows: Array<{ date: string; start: string; end: string }>;
 } {
+  const isGroup = form.booking_style === "group";
+  const scheduleMode = isGroup && form.schedule_mode === "dates" ? "dates" : "weekly";
+  const datesOnly = scheduleMode === "dates" ? 1 : 0;
   const dateCount = Math.min(100, Number(form.ed_count) || 0);
   const dateRows: Array<{ date: string; start: string; end: string }> = [];
-  for (let i = 0; i < dateCount; i++) {
-    const date = String(form[`ed_date_${i}`] ?? "").trim();
-    const start = String(form[`ed_start_${i}`] ?? "").trim();
-    const end = String(form[`ed_end_${i}`] ?? "").trim();
-    if (!date && !start && !end) continue;
-    dateRows.push({ date, start, end });
+  if (datesOnly === 1) {
+    for (let i = 0; i < dateCount; i++) {
+      const date = String(form[`ed_date_${i}`] ?? "").trim();
+      const start = String(form[`ed_start_${i}`] ?? "").trim();
+      const end = String(form[`ed_end_${i}`] ?? "").trim();
+      if (!date && !start && !end) continue;
+      dateRows.push({ date, start, end });
+    }
   }
   return {
     name: String(form.name ?? "").trim(),
@@ -312,15 +317,14 @@ function parseEventTypeForm(form: Record<string, string | File>): {
     description: form.description ? String(form.description).trim() : "",
     duration: Number(form.duration_minutes),
     bufferMinutes: Number(form.buffer_minutes),
-    seatsTotal:
-      form.booking_style === "group"
-        ? (() => {
-            const n = Number(form.group_seats);
-            return Number.isInteger(n) && n >= 2 && n <= 100 ? n : 2;
-          })()
-        : 1,
-    scheduleMode: form.schedule_mode === "dates" ? "dates" : "weekly",
-    datesOnly: form.schedule_mode === "dates" ? 1 : 0,
+    seatsTotal: isGroup
+      ? (() => {
+          const n = Number(form.group_seats);
+          return Number.isInteger(n) && n >= 2 && n <= 100 ? n : 2;
+        })()
+      : 1,
+    scheduleMode,
+    datesOnly,
     locationType: isLocationType(String(form.location_type ?? ""))
       ? String(form.location_type)
       : "none",
@@ -603,18 +607,21 @@ dashboard.post("/event-types/:id", async (c) => {
   );
   const bookings = await countBookingsForEventType(c.env.DB, id);
 
-  // Event dates: the mode decides whether slots come from the weekly grid or
-  // from the listed dates. Rows are indexed (ed_date_0, ed_start_0, …).
-  const scheduleMode = form.schedule_mode === "dates" ? "dates" : "weekly";
+  // Event dates: schedule is only meaningful for group events. Private events
+  // always use the host's weekly availability.
+  const isGroup = form.booking_style === "group";
+  const scheduleMode = isGroup && form.schedule_mode === "dates" ? "dates" : "weekly";
   const datesOnly = scheduleMode === "dates" ? 1 : 0;
   const dateCount = Math.min(100, Number(form.ed_count) || 0);
   const dateRows: { date: string; start: string; end: string }[] = [];
-  for (let i = 0; i < dateCount; i++) {
-    const date = String(form[`ed_date_${i}`] ?? "").trim();
-    const start = String(form[`ed_start_${i}`] ?? "").trim();
-    const end = String(form[`ed_end_${i}`] ?? "").trim();
-    if (!date && !start && !end) continue;
-    dateRows.push({ date, start, end });
+  if (datesOnly === 1) {
+    for (let i = 0; i < dateCount; i++) {
+      const date = String(form[`ed_date_${i}`] ?? "").trim();
+      const start = String(form[`ed_start_${i}`] ?? "").trim();
+      const end = String(form[`ed_end_${i}`] ?? "").trim();
+      if (!date && !start && !end) continue;
+      dateRows.push({ date, start, end });
+    }
   }
   const datesInvalid = dateRows.some(
     (r) => !isEventDateRow({ date: r.date, start_time: r.start, end_time: r.end }),

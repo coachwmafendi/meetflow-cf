@@ -706,12 +706,10 @@ export function eventTypeCreatePage(
     locationType: "none",
     locationValue: "",
   };
-  const initialDates = d.dates.length
-    ? d.dates
-    : d.scheduleMode === "dates"
-      ? [{ date: "", start: "", end: "" }]
-      : [];
-  const datesOnly = d.scheduleMode === "dates" ? 1 : 0;
+  const showSchedule = d.seatsTotal > 1;
+  const effectiveDatesOnly = showSchedule && d.scheduleMode === "dates" ? 1 : 0;
+  const initialDates =
+    effectiveDatesOnly === 1 ? (d.dates.length ? d.dates : [{ date: "", start: "", end: "" }]) : [];
 
   const dateRowsHtml = initialDates
     .map(
@@ -825,45 +823,47 @@ export function eventTypeCreatePage(
             </div>
           </div>
 
-          <div class="ui-fieldset">
-            <label class="ui-label" for="schedule_mode">Schedule</label>
-            <select class="ui-select" id="schedule_mode" name="schedule_mode" data-schedule-mode>
-              <option value="weekly"${datesOnly === 0 ? " selected" : ""}>Weekly schedule</option>
-              <option value="dates"${datesOnly === 1 ? " selected" : ""}>Specific dates only</option>
-            </select>
-            <p class="ui-hint" data-hint-weekly>Slots follow your weekly availability rules.</p>
-            <div data-dates-block class="mt-2 space-y-2" hidden>
-              <p class="ui-hint">
-                Each date runs as one session from start to end — add several rows on the same
-                date for multiple sessions that day.
-              </p>
-              <div class="space-y-2" data-date-rows>
-                ${
-                  dateRowsHtml ||
+          <div data-schedule-section class="${showSchedule ? "" : "hidden"}">
+            <div class="ui-fieldset">
+              <label class="ui-label" for="schedule_mode">Schedule</label>
+              <select class="ui-select" id="schedule_mode" name="schedule_mode" data-schedule-mode>
+                <option value="weekly"${effectiveDatesOnly === 0 ? " selected" : ""}>Weekly schedule</option>
+                <option value="dates"${effectiveDatesOnly === 1 ? " selected" : ""}>Specific dates only</option>
+              </select>
+              <p class="ui-hint" data-hint-weekly>Slots follow your weekly availability rules.</p>
+              <div data-dates-block class="mt-2 space-y-2" hidden>
+                <p class="ui-hint">
+                  Each date runs as one session from start to end — add several rows on the same
+                  date for multiple sessions that day.
+                </p>
+                <div class="space-y-2" data-date-rows>
+                  ${
+                    dateRowsHtml ||
+                    `
+                    <div class="flex items-center gap-2" data-date-row>
+                      <input class="ui-input font-mono" type="date" name="ed_date_0" aria-label="Date 1">
+                      <input class="ui-input font-mono" type="time" name="ed_start_0" aria-label="Start time 1">
+                      <span class="text-[0.75rem] text-muted shrink-0">to</span>
+                      <input class="ui-input font-mono" type="time" name="ed_end_0" aria-label="End time 1">
+                      <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
+                              data-remove-date aria-label="Remove date">
+                        ${icon("x", "size-4")}
+                      </button>
+                    </div>
                   `
-                  <div class="flex items-center gap-2" data-date-row>
-                    <input class="ui-input font-mono" type="date" name="ed_date_0" aria-label="Date 1">
-                    <input class="ui-input font-mono" type="time" name="ed_start_0" aria-label="Start time 1">
-                    <span class="text-[0.75rem] text-muted shrink-0">to</span>
-                    <input class="ui-input font-mono" type="time" name="ed_end_0" aria-label="End time 1">
-                    <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
-                            data-remove-date aria-label="Remove date">
-                      ${icon("x", "size-4")}
-                    </button>
-                  </div>
-                `
-                }
-              </div>
-              <input type="hidden" name="ed_count" data-date-count value="${initialDates.length}">
-              <div>
-                <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-add-date>
-                  ${icon("plus", "size-4")}<span>Add date</span>
-                </button>
+                  }
+                </div>
+                <input type="hidden" name="ed_count" data-date-count value="${initialDates.length}">
+                <div>
+                  <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-add-date>
+                    ${icon("plus", "size-4")}<span>Add date</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          <div data-weekly-block${datesOnly === 1 ? " hidden" : ""}>
+          <div data-weekly-block${effectiveDatesOnly === 1 ? " hidden" : ""}>
             ${field({
               name: "duration_minutes",
               label: "Duration",
@@ -1042,6 +1042,10 @@ export function eventTypeCreatePage(
           var styleGroup = document.querySelector("[data-booking-style]");
           var styleInput = document.getElementById("booking_style");
           var groupSeats = document.querySelector("[data-group-seats]");
+          var scheduleSection = document.querySelector("[data-schedule-section]");
+          var scheduleMode = document.querySelector("[data-schedule-mode]");
+          var datesBlock = document.querySelector("[data-dates-block]");
+          var weeklyHint = document.querySelector("[data-hint-weekly]");
           if (styleGroup && styleInput && groupSeats) {
             function setStyle(value) {
               styleInput.value = value;
@@ -1049,6 +1053,16 @@ export function eventTypeCreatePage(
                 btn.classList.toggle("ui-seg-active", btn.getAttribute("data-value") === value);
               });
               groupSeats.classList.toggle("hidden", value !== "group");
+              if (scheduleSection) {
+                scheduleSection.classList.toggle("hidden", value !== "group");
+              }
+              if (value !== "group" && scheduleMode) {
+                scheduleMode.value = "weekly";
+                if (datesBlock) datesBlock.hidden = true;
+                if (weeklyHint) weeklyHint.hidden = false;
+                var weeklyBlock = document.querySelector("[data-weekly-block]");
+                if (weeklyBlock) weeklyBlock.hidden = false;
+              }
             }
             styleGroup.addEventListener("click", function (event) {
               var btn = event.target.closest("[data-value]");
@@ -1114,6 +1128,8 @@ export function eventTypeEditPage(
 ): string {
   const path = `/${user.slug}/${eventType.slug}`;
   const active = eventType.is_active === 1;
+  const showSchedule = eventType.seats_total > 1;
+  const effectiveDatesOnly = showSchedule && eventType.dates_only === 1 ? 1 : 0;
 
   // A type with history can never be hard-deleted, or its bookings lose their
   // event name. Say so on the button rather than surprising the host after.
@@ -1202,7 +1218,7 @@ export function eventTypeEditPage(
             </div>
           </div>
 
-          <div data-weekly-block>
+           <div data-weekly-block${effectiveDatesOnly === 1 ? " hidden" : ""}>
           ${field({
             name: "duration_minutes",
             label: "Duration",
@@ -1237,61 +1253,63 @@ export function eventTypeEditPage(
               <p class="ui-hint">Each guest gets a ticket code for a shared slot.</p>
             </div>
           </div>
-          <div class="ui-fieldset">
-            <label class="ui-label" for="schedule_mode">Schedule</label>
-            <select class="ui-select" id="schedule_mode" name="schedule_mode" data-schedule-mode>
-              <option value="weekly"${eventType.dates_only === 1 ? "" : " selected"}>
-                Weekly schedule
-              </option>
-              <option value="dates"${eventType.dates_only === 1 ? " selected" : ""}>
-                Specific dates only
-              </option>
-            </select>
-            <p class="ui-hint" data-hint-weekly>Slots follow your weekly availability rules.</p>
-            <div data-dates-block class="mt-2 space-y-2" hidden>
-              <p class="ui-hint">
-                Each date runs as one session from start to end — add several rows on the same
-                date for multiple sessions that day.
-              </p>
-              <div class="space-y-2" data-date-rows>
-                ${
-                  dateRows.length
-                    ? dateRows
-                        .map(
-                          (r, i) => `
-                  <div class="flex items-center gap-2" data-date-row>
-                    <input class="ui-input font-mono" type="date" name="ed_date_${i}"
-                           value="${escapeHtml(r.date)}" aria-label="Date ${i + 1}">
-                    <input class="ui-input font-mono" type="time" name="ed_start_${i}"
-                           value="${escapeHtml(r.start)}" aria-label="Start time ${i + 1}">
-                    <span class="text-[0.75rem] text-muted shrink-0">to</span>
-                    <input class="ui-input font-mono" type="time" name="ed_end_${i}"
-                           value="${escapeHtml(r.end)}" aria-label="End time ${i + 1}">
-                    <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
-                            data-remove-date aria-label="Remove date">
-                      ${icon("x", "size-4")}
-                    </button>
-                  </div>`,
-                        )
-                        .join("")
-                    : `<div class="flex items-center gap-2" data-date-row>
-                    <input class="ui-input font-mono" type="date" name="ed_date_0" aria-label="Date 1">
-                    <input class="ui-input font-mono" type="time" name="ed_start_0" aria-label="Start time 1">
-                    <span class="text-[0.75rem] text-muted shrink-0">to</span>
-                    <input class="ui-input font-mono" type="time" name="ed_end_0" aria-label="End time 1">
-                    <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
-                            data-remove-date aria-label="Remove date">
-                      ${icon("x", "size-4")}
-                    </button>
-                  </div>`
-                }
-              </div>
-              <input type="hidden" name="ed_count" data-date-count
-                     value="${eventType.dates_only === 1 ? Math.max(1, dateRows.length) : 0}">
-              <div>
-                <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-add-date>
-                  ${icon("plus", "size-4")}<span>Add date</span>
-                </button>
+          <div data-schedule-section class="${showSchedule ? "" : "hidden"}">
+            <div class="ui-fieldset">
+              <label class="ui-label" for="schedule_mode">Schedule</label>
+              <select class="ui-select" id="schedule_mode" name="schedule_mode" data-schedule-mode>
+                <option value="weekly"${effectiveDatesOnly === 0 ? " selected" : ""}>
+                  Weekly schedule
+                </option>
+                <option value="dates"${effectiveDatesOnly === 1 ? " selected" : ""}>
+                  Specific dates only
+                </option>
+              </select>
+              <p class="ui-hint" data-hint-weekly>Slots follow your weekly availability rules.</p>
+              <div data-dates-block class="mt-2 space-y-2" hidden>
+                <p class="ui-hint">
+                  Each date runs as one session from start to end — add several rows on the same
+                  date for multiple sessions that day.
+                </p>
+                <div class="space-y-2" data-date-rows>
+                  ${
+                    dateRows.length
+                      ? dateRows
+                          .map(
+                            (r, i) => `
+                    <div class="flex items-center gap-2" data-date-row>
+                      <input class="ui-input font-mono" type="date" name="ed_date_${i}"
+                             value="${escapeHtml(r.date)}" aria-label="Date ${i + 1}">
+                      <input class="ui-input font-mono" type="time" name="ed_start_${i}"
+                             value="${escapeHtml(r.start)}" aria-label="Start time ${i + 1}">
+                      <span class="text-[0.75rem] text-muted shrink-0">to</span>
+                      <input class="ui-input font-mono" type="time" name="ed_end_${i}"
+                             value="${escapeHtml(r.end)}" aria-label="End time ${i + 1}">
+                      <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
+                              data-remove-date aria-label="Remove date">
+                        ${icon("x", "size-4")}
+                      </button>
+                    </div>`,
+                          )
+                          .join("")
+                      : `<div class="flex items-center gap-2" data-date-row>
+                      <input class="ui-input font-mono" type="date" name="ed_date_0" aria-label="Date 1">
+                      <input class="ui-input font-mono" type="time" name="ed_start_0" aria-label="Start time 1">
+                      <span class="text-[0.75rem] text-muted shrink-0">to</span>
+                      <input class="ui-input font-mono" type="time" name="ed_end_0" aria-label="End time 1">
+                      <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
+                              data-remove-date aria-label="Remove date">
+                        ${icon("x", "size-4")}
+                      </button>
+                    </div>`
+                  }
+                </div>
+                <input type="hidden" name="ed_count" data-date-count
+                       value="${effectiveDatesOnly === 1 ? Math.max(1, dateRows.length) : 0}">
+                <div>
+                  <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-add-date>
+                    ${icon("plus", "size-4")}<span>Add date</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1440,6 +1458,10 @@ export function eventTypeEditPage(
           var styleGroup = document.querySelector("[data-booking-style]");
           var styleInput = document.getElementById("booking_style");
           var groupSeats = document.querySelector("[data-group-seats]");
+          var scheduleSection = document.querySelector("[data-schedule-section]");
+          var scheduleMode = document.querySelector("[data-schedule-mode]");
+          var datesBlock = document.querySelector("[data-dates-block]");
+          var weeklyHint = document.querySelector("[data-hint-weekly]");
           if (styleGroup && styleInput && groupSeats) {
             function setStyle(value) {
               styleInput.value = value;
@@ -1447,6 +1469,16 @@ export function eventTypeEditPage(
                 btn.classList.toggle("ui-seg-active", btn.getAttribute("data-value") === value);
               });
               groupSeats.classList.toggle("hidden", value !== "group");
+              if (scheduleSection) {
+                scheduleSection.classList.toggle("hidden", value !== "group");
+              }
+              if (value !== "group" && scheduleMode) {
+                scheduleMode.value = "weekly";
+                if (datesBlock) datesBlock.hidden = true;
+                if (weeklyHint) weeklyHint.hidden = false;
+                var weeklyBlock = document.querySelector("[data-weekly-block]");
+                if (weeklyBlock) weeklyBlock.hidden = false;
+              }
             }
             styleGroup.addEventListener("click", function (event) {
               var btn = event.target.closest("[data-value]");
