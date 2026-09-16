@@ -57,7 +57,7 @@ const ICON_PATHS = {
   quote:
     '<path d="M16 3a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2 2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M5 3a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2 2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M16 13v3a3 3 0 0 0 3 3h1a3 3 0 0 0 3-3v-1a3 3 0 0 0-3-3h-1a2 2 0 0 0-2 2v2Z"/><path d="M5 13v3a3 3 0 0 0 3 3h1a3 3 0 0 0 3-3v-1a3 3 0 0 0-3-3H7a2 2 0 0 0-2 2v2Z"/>',
   googleMeet:
-    '<path fill="#EA4335" d="M3 4.5h5v5H3z"/><path fill="#FBBC04" d="M8 4.5h6a2 2 0 0 1 2 2v3H8v-5Z"/><path fill="#4285F4" d="M3 10h5v5H3z"/><path fill="#34A853" d="M8 10h8v3a2 2 0 0 1-2 2H8v-5Z"/><path fill="#34A853" d="M16 8.5 22 5v9l-6-3.5v-2Z"/>',
+    '<path fill="#EA4335" d="M3 5h5v6H3z"/><path fill="#FBBC04" d="M9 5h7a2 2 0 0 1 2 2v4H9V5Z"/><path fill="#4285F4" d="M3 12h5v5H3z"/><path fill="#34A853" d="M9 12h9v3a2 2 0 0 1-2 2H9v-5Z"/><path fill="#00832d" d="M15 8.5 22 5v14l-7-3.5v-7Z"/>',
   zoom: '<circle cx="12" cy="12" r="12" fill="#2D8CFF"/><path fill="#fff" d="M6.5 8.5A1.5 1.5 0 0 1 8 7h5a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 13 17H8a1.5 1.5 0 0 1-1.5-1.5v-7Zm8 1.5 4.5-3v8l-4.5-3v-2Z"/>',
 } as const;
 
