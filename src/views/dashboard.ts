@@ -1109,9 +1109,9 @@ export function eventTypeCreatePage(
           locationType.addEventListener("change", syncLocation);
           syncLocation();
         })();
+      </script>
       ${MARKDOWN_EDITOR_SCRIPT}
-      ${LOCATION_SELECT_SCRIPT}
-      </script>`,
+      ${LOCATION_SELECT_SCRIPT}`,
   });
 }
 
@@ -1604,9 +1604,9 @@ export function eventTypeEditPage(
           locationType.addEventListener("change", syncLocation);
           syncLocation();
         })();
+      </script>
       ${MARKDOWN_EDITOR_SCRIPT}
-      ${LOCATION_SELECT_SCRIPT}
-      </script>`,
+      ${LOCATION_SELECT_SCRIPT}`,
   });
 }
 
