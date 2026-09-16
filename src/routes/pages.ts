@@ -312,7 +312,13 @@ function parseEventTypeForm(form: Record<string, string | File>): {
     description: form.description ? String(form.description).trim() : "",
     duration: Number(form.duration_minutes),
     bufferMinutes: Number(form.buffer_minutes),
-    seatsTotal: Number(form.seats_total),
+    seatsTotal:
+      form.booking_style === "group"
+        ? (() => {
+            const n = Number(form.group_seats);
+            return Number.isInteger(n) && n >= 2 && n <= 100 ? n : 2;
+          })()
+        : 1,
     scheduleMode: form.schedule_mode === "dates" ? "dates" : "weekly",
     datesOnly: form.schedule_mode === "dates" ? 1 : 0,
     locationType: isLocationType(String(form.location_type ?? ""))
@@ -570,12 +576,16 @@ dashboard.post("/event-types/:id", async (c) => {
   const slug = String(form.slug ?? "").toLowerCase();
   const duration = Number(form.duration_minutes);
   const bufferMinutes = Number(form.buffer_minutes);
-  const seatsTotal = Number(form.seats_total);
+  const seatsTotal =
+    form.booking_style === "group"
+      ? (() => {
+          const n = Number(form.group_seats);
+          return Number.isInteger(n) && n >= 2 && n <= 100 ? n : 2;
+        })()
+      : 1;
   const locationType = isLocationType(String(form.location_type ?? ""))
     ? String(form.location_type)
     : "none";
-  const seats =
-    Number.isInteger(seatsTotal) && seatsTotal >= 1 && seatsTotal <= 100 ? seatsTotal : 1;
   const savedChoice = String(form.saved_location_value ?? "");
   const locationValue = normalizeLocationValue(
     locationType,
@@ -647,9 +657,9 @@ dashboard.post("/event-types/:id", async (c) => {
               form.buffer_minutes !== undefined &&
               (!Number.isInteger(bufferMinutes) || bufferMinutes < 0 || bufferMinutes > 120)
             ? "Buffer must be between 0 and 120 minutes."
-            : form.seats_total !== undefined &&
-                (!Number.isInteger(seatsTotal) || seatsTotal < 1 || seatsTotal > 100)
-              ? "Seats must be between 1 and 100."
+            : form.booking_style === "group" &&
+                (!Number.isInteger(seatsTotal) || seatsTotal < 2 || seatsTotal > 100)
+              ? "Group seats must be between 2 and 100."
               : datesInvalid
                 ? "Event dates need a date and a start time before the end time."
                 : datesMissing

@@ -640,10 +640,21 @@ export function eventTypeCreatePage(
           })}
 
           <div class="ui-fieldset">
-            <label class="ui-label" for="seats_total">Booking style</label>
-            <input class="ui-input font-mono" id="seats_total" name="seats_total" type="number"
-                   value="${String(d.seatsTotal)}" min="1" max="100" step="1">
-            <p class="ui-hint">1 = private booking. 2 or more = group/shared slot.</p>
+            <span class="ui-label">Booking style</span>
+            <div class="ui-seg" role="group" aria-label="Booking style" data-booking-style>
+              <button type="button" class="${d.seatsTotal === 1 ? "ui-seg-active" : ""}"
+                      data-value="private">Private — one guest</button>
+              <button type="button" class="${d.seatsTotal > 1 ? "ui-seg-active" : ""}"
+                      data-value="group">Group — shared slot</button>
+            </div>
+            <input type="hidden" name="booking_style" id="booking_style"
+                   value="${d.seatsTotal === 1 ? "private" : "group"}">
+            <div data-group-seats class="mt-3 ${d.seatsTotal > 1 ? "" : "hidden"}">
+              <label class="ui-label" for="group_seats">Seats per session</label>
+              <input class="ui-input font-mono" id="group_seats" name="group_seats"
+                     type="number" value="${String(Math.max(2, d.seatsTotal))}" min="2" max="100" step="1">
+              <p class="ui-hint">Each guest gets a ticket code for a shared slot.</p>
+            </div>
           </div>
 
           <div class="ui-fieldset">
@@ -850,6 +861,26 @@ export function eventTypeCreatePage(
         })();
 
         (function () {
+          var styleGroup = document.querySelector("[data-booking-style]");
+          var styleInput = document.getElementById("booking_style");
+          var groupSeats = document.querySelector("[data-group-seats]");
+          if (styleGroup && styleInput && groupSeats) {
+            function setStyle(value) {
+              styleInput.value = value;
+              styleGroup.querySelectorAll("[data-value]").forEach(function (btn) {
+                btn.classList.toggle("ui-seg-active", btn.getAttribute("data-value") === value);
+              });
+              groupSeats.classList.toggle("hidden", value !== "group");
+            }
+            styleGroup.addEventListener("click", function (event) {
+              var btn = event.target.closest("[data-value]");
+              if (!btn) return;
+              setStyle(btn.getAttribute("data-value"));
+            });
+          }
+        })();
+
+        (function () {
           var locationType = document.getElementById("location_type");
           var valueBlock = document.querySelector("[data-location-value-block]");
           if (!locationType || !valueBlock) return;
@@ -1009,17 +1040,23 @@ export function eventTypeEditPage(
             attrsHtml: 'min="0" max="120" step="5"',
           })}
           </div>
-          ${field({
-            name: "seats_total",
-            label: "Seats",
-            type: "number",
-            value: String(eventType.seats_total),
-            hint:
-              eventType.seats_total > 1
-                ? `Group event — up to ${eventType.seats_total} guests share a slot.`
-                : "1 = private booking. Raise it to run group events.",
-            attrsHtml: 'min="1" max="100" step="1"',
-          })}
+          <div class="ui-fieldset">
+            <span class="ui-label">Booking style</span>
+            <div class="ui-seg" role="group" aria-label="Booking style" data-booking-style>
+              <button type="button" class="${eventType.seats_total === 1 ? "ui-seg-active" : ""}"
+                      data-value="private">Private — one guest</button>
+              <button type="button" class="${eventType.seats_total > 1 ? "ui-seg-active" : ""}"
+                      data-value="group">Group — shared slot</button>
+            </div>
+            <input type="hidden" name="booking_style" id="booking_style"
+                   value="${eventType.seats_total === 1 ? "private" : "group"}">
+            <div data-group-seats class="mt-3 ${eventType.seats_total > 1 ? "" : "hidden"}">
+              <label class="ui-label" for="group_seats">Seats per session</label>
+              <input class="ui-input font-mono" id="group_seats" name="group_seats"
+                     type="number" value="${String(Math.max(2, eventType.seats_total))}" min="2" max="100" step="1">
+              <p class="ui-hint">Each guest gets a ticket code for a shared slot.</p>
+            </div>
+          </div>
           <div class="ui-fieldset">
             <label class="ui-label" for="schedule_mode">Schedule</label>
             <select class="ui-select" id="schedule_mode" name="schedule_mode" data-schedule-mode>
@@ -1228,6 +1265,26 @@ export function eventTypeEditPage(
           });
 
           sync();
+        })();
+
+        (function () {
+          var styleGroup = document.querySelector("[data-booking-style]");
+          var styleInput = document.getElementById("booking_style");
+          var groupSeats = document.querySelector("[data-group-seats]");
+          if (styleGroup && styleInput && groupSeats) {
+            function setStyle(value) {
+              styleInput.value = value;
+              styleGroup.querySelectorAll("[data-value]").forEach(function (btn) {
+                btn.classList.toggle("ui-seg-active", btn.getAttribute("data-value") === value);
+              });
+              groupSeats.classList.toggle("hidden", value !== "group");
+            }
+            styleGroup.addEventListener("click", function (event) {
+              var btn = event.target.closest("[data-value]");
+              if (!btn) return;
+              setStyle(btn.getAttribute("data-value"));
+            });
+          }
         })();
 
         (function () {
