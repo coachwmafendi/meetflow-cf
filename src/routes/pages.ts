@@ -57,7 +57,7 @@ import {
   normalizeLocationValue,
 } from "../lib/validate";
 import { clearSession, issueSession } from "../middleware/auth";
-import { LIMITS, rateLimit } from "../middleware/rateLimit";
+import { LIMITS, rateLimit, rateLimitIfNeeded } from "../middleware/rateLimit";
 import { AuthError, createPasswordReset, login, register, resetPassword } from "../services/auth";
 import {
   BookingError,
@@ -403,6 +403,11 @@ dashboard.post("/event-types", async (c) => {
     imageFile = form.image;
   }
 
+  if (imageFile) {
+    const limited = await rateLimitIfNeeded(c, LIMITS.eventImage);
+    if (limited) return limited;
+  }
+
   let imagePayload: { bytes: Uint8Array; format: import("../lib/image").ImageFormat } | undefined;
   if (imageFile) {
     try {
@@ -614,10 +619,12 @@ dashboard.post("/event-types/:id", async (c) => {
   const removeImage = form.remove_image === "1" || form.remove_image === "on";
 
   // Validate new image before any DB writes so the event type is never
-  // created with a failed upload.
+  // updated with a failed upload.
   let newImagePayload:
     { bytes: Uint8Array; format: import("../lib/image").ImageFormat } | undefined;
   if (form.image instanceof File && form.image.size > 0) {
+    const limited = await rateLimitIfNeeded(c, LIMITS.eventImage);
+    if (limited) return limited;
     try {
       newImagePayload = await validateEventImage(form.image);
     } catch (err) {

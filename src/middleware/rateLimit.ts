@@ -46,6 +46,8 @@ export const LIMITS = {
   register: { bucket: "register", limit: 5, periodSeconds: 3600 },
   /** Authenticated, but each upload writes up to 2MB to R2. */
   avatar: { bucket: "avatar", limit: 20, periodSeconds: 3600 },
+  /** Authenticated event cover-image uploads: up to 5MB each. */
+  eventImage: { bucket: "event-image", limit: 30, periodSeconds: 3600 },
   /**
    * Unauthenticated: the signed link is the only credential, so cap how fast
    * tokens can be tried even though forging one requires the secret.
@@ -114,6 +116,29 @@ function overridesFor(raw: string | undefined): ReadonlyMap<string, number> {
   return cachedOverrides;
 }
 
+async function hitRateLimit(
+  c: Context<AppEnv>,
+  { bucket, limit, periodSeconds = 60 }: Omit<RateLimitOptions, "onLimited">,
+): Promise<{ limited: false } | { limited: true; retryAfter: number }> {
+  const namespace = c.env.RATE_LIMITER as
+    DurableObjectNamespace<import("../rateLimiter").RateLimiter> | undefined;
+
+  if (!namespace) {
+    console.warn(`rateLimit: RATE_LIMITER binding missing, allowing ${bucket}`);
+    return { limited: false };
+  }
+
+  const effectiveLimit = overridesFor(c.env.RATE_LIMIT_OVERRIDES).get(bucket) ?? limit;
+  const key = `${bucket}:${clientKey(c)}`;
+  const stub = namespace.get(namespace.idFromName(key));
+  const { success, resetAt } = await stub.hit(effectiveLimit, periodSeconds);
+
+  if (!success) {
+    return { limited: true, retryAfter: Math.max(1, Math.ceil((resetAt - Date.now()) / 1000)) };
+  }
+  return { limited: false };
+}
+
 /**
  * Rejects with 429 once a caller exceeds `limit` requests per window.
  *
@@ -123,32 +148,33 @@ function overridesFor(raw: string | undefined): ReadonlyMap<string, number> {
  */
 export function rateLimit({ bucket, limit, periodSeconds = 60, onLimited }: RateLimitOptions) {
   return createMiddleware<AppEnv>(async (c, next) => {
-    const namespace = c.env.RATE_LIMITER as
-      DurableObjectNamespace<import("../rateLimiter").RateLimiter> | undefined;
-
-    if (!namespace) {
-      console.warn(`rateLimit: RATE_LIMITER binding missing, allowing ${bucket}`);
-      return next();
-    }
-
-    const effectiveLimit = overridesFor(c.env.RATE_LIMIT_OVERRIDES).get(bucket) ?? limit;
-
-    const key = `${bucket}:${clientKey(c)}`;
-    const stub = namespace.get(namespace.idFromName(key));
-    const { success, resetAt } = await stub.hit(effectiveLimit, periodSeconds);
-
-    if (!success) {
-      const retryAfter = Math.max(1, Math.ceil((resetAt - Date.now()) / 1000));
+    const result = await hitRateLimit(c, { bucket, limit, periodSeconds });
+    if (result.limited) {
       if (onLimited) {
-        const res = onLimited(c, retryAfter);
-        res.headers.set("retry-after", String(retryAfter));
+        const res = onLimited(c, result.retryAfter);
+        res.headers.set("retry-after", String(result.retryAfter));
         return res;
       }
       return c.json({ error: "Too many requests. Please wait a moment and try again." }, 429, {
-        "retry-after": String(retryAfter),
+        "retry-after": String(result.retryAfter),
       });
     }
-
     await next();
+  });
+}
+
+/**
+ * Imperative rate-limit check for use inside a handler (e.g. only when an image
+ * is actually uploaded). Returns a 429 response when limited, or null when
+ * allowed or the binding is missing.
+ */
+export async function rateLimitIfNeeded(
+  c: Context<AppEnv>,
+  options: Omit<RateLimitOptions, "onLimited">,
+): Promise<Response | null> {
+  const result = await hitRateLimit(c, options);
+  if (!result.limited) return null;
+  return c.json({ error: "Too many requests. Please wait a moment and try again." }, 429, {
+    "retry-after": String(result.retryAfter),
   });
 }

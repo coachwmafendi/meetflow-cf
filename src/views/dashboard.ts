@@ -832,7 +832,17 @@ export function eventTypeCreatePage(
             });
           }
 
+          var objectUrl = null;
+
+          function revoke() {
+            if (objectUrl) {
+              URL.revokeObjectURL(objectUrl);
+              objectUrl = null;
+            }
+          }
+
           function clearPreview() {
+            revoke();
             if (fileInput) fileInput.value = "";
             if (previewWrap) previewWrap.classList.add("hidden");
             if (previewImageCard) {
@@ -845,7 +855,9 @@ export function eventTypeCreatePage(
             fileInput.addEventListener("change", function () {
               var file = fileInput.files && fileInput.files[0];
               if (!file) return clearPreview();
+              revoke();
               var url = URL.createObjectURL(file);
+              objectUrl = url;
               previewImg.src = url;
               previewWrap.classList.remove("hidden");
               if (previewImageCard) {
@@ -1295,7 +1307,17 @@ export function eventTypeEditPage(
           var removeCheckbox = document.querySelector('input[name="remove_image"]');
           var currentImage = document.querySelector("[data-current-image]");
 
+          var objectUrl = null;
+
+          function revoke() {
+            if (objectUrl) {
+              URL.revokeObjectURL(objectUrl);
+              objectUrl = null;
+            }
+          }
+
           function clearPreview() {
+            revoke();
             if (fileInput) fileInput.value = "";
             if (previewWrap) previewWrap.classList.add("hidden");
             if (currentImage) {
@@ -1308,9 +1330,12 @@ export function eventTypeEditPage(
             fileInput.addEventListener("change", function () {
               var file = fileInput.files && fileInput.files[0];
               if (!file) return clearPreview();
+              revoke();
               if (removeCheckbox) removeCheckbox.checked = false;
               if (currentImage) currentImage.classList.add("hidden");
-              previewImg.src = URL.createObjectURL(file);
+              var url = URL.createObjectURL(file);
+              objectUrl = url;
+              previewImg.src = url;
               previewWrap.classList.remove("hidden");
             });
           }
