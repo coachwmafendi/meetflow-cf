@@ -1,6 +1,7 @@
 import { escapeHtml, layout, themeToggle } from "./layout";
 import { utcToZonedParts } from "../lib/timezone";
 import { zoneDisplay } from "../lib/timezoneList";
+import { markdownToHtml } from "../lib/markdown";
 import { avatar, badge, button, emptyState, icon } from "./ui";
 import { TIMEZONE_SCRIPT } from "./timezoneSelect";
 import type { BookingAttendeeRow, BookingRow, EventTypeRow, PublicUser } from "../types";
@@ -85,9 +86,9 @@ export function profilePage(host: PublicUser, eventTypes: EventTypeRow[]): strin
             }
             ${
               e.description
-                ? `<p class="mt-2.5 text-[0.8125rem] leading-relaxed text-muted">${escapeHtml(
+                ? `<div class="mt-2.5 text-[0.8125rem] leading-relaxed text-muted">${markdownToHtml(
                     e.description,
-                  )}</p>`
+                  )}</div>`
                 : ""
             }
           </div>
@@ -244,9 +245,9 @@ export function bookingPage(
 
               ${
                 eventType.description
-                  ? `<p class="mt-4 border-t border-line pt-4 text-[0.8125rem] leading-relaxed text-muted">${escapeHtml(
+                  ? `<div class="mt-4 border-t border-line pt-4 text-[0.8125rem] leading-relaxed text-muted">${markdownToHtml(
                       eventType.description,
-                    )}</p>`
+                    )}</div>`
                   : ""
               }
             </aside>

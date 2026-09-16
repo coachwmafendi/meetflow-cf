@@ -142,6 +142,95 @@ const EMBED_SCRIPT = `
     })();
   </script>`;
 
+const MARKDOWN_EDITOR_SCRIPT = `
+  <script>
+    (function () {
+      function setSelection(ta, start, end) {
+        ta.selectionStart = start;
+        ta.selectionEnd = end || start;
+        ta.focus();
+      }
+
+      function wrap(ta, before, after, placeholder) {
+        var start = ta.selectionStart;
+        var end = ta.selectionEnd;
+        var selected = ta.value.slice(start, end);
+        var text = selected || (placeholder || "text");
+        var replacement = before + text + after;
+        ta.value = ta.value.slice(0, start) + replacement + ta.value.slice(end);
+        if (selected) {
+          setSelection(ta, start + before.length, start + before.length + text.length);
+        } else {
+          setSelection(ta, start + before.length, start + before.length + text.length);
+        }
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+
+      function prefixLines(ta, marker) {
+        var start = ta.selectionStart;
+        var end = ta.selectionEnd;
+        var value = ta.value;
+        var lineStart = value.lastIndexOf("\n", start - 1) + 1;
+        var lineEnd = value.indexOf("\n", end);
+        if (lineEnd === -1) lineEnd = value.length;
+        var selected = value.slice(lineStart, lineEnd);
+        var prefixed = selected.split("\n").map(function (l) {
+          var trimmed = l.trim();
+          if (marker === "## " && /^#{1,6}\s/.test(trimmed)) return l;
+          if (l.startsWith(marker)) return l.slice(marker.length);
+          return marker + l;
+        }).join("\n");
+        ta.value = value.slice(0, lineStart) + prefixed + value.slice(lineEnd);
+        setSelection(ta, lineStart, lineStart + prefixed.length);
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+
+      document.addEventListener("click", function (event) {
+        var btn = event.target.closest("[data-md-action]");
+        if (!btn) return;
+        var toolbar = btn.closest("[data-md-toolbar]");
+        if (!toolbar) return;
+        var ta = toolbar.parentElement.querySelector("[data-md-textarea]");
+        if (!ta) return;
+        var action = btn.getAttribute("data-md-action");
+
+        if (action === "bold") return wrap(ta, "**", "**", "bold text");
+        if (action === "italic") return wrap(ta, "*", "*", "italic text");
+        if (action === "h2") return prefixLines(ta, "## ");
+        if (action === "ul") return prefixLines(ta, "- ");
+        if (action === "quote") return prefixLines(ta, "> ");
+        if (action === "link") {
+          var selected = ta.value.slice(ta.selectionStart, ta.selectionEnd) || "link text";
+          var url = window.prompt("Link URL", "https://");
+          if (!url) return;
+          var replacement = "[" + selected + "](" + url + ")";
+          var start = ta.selectionStart;
+          ta.value = ta.value.slice(0, start) + replacement + ta.value.slice(ta.selectionEnd);
+          setSelection(ta, start + 1, start + 1 + selected.length);
+          ta.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      });
+    })();
+  </script>`;
+
+function descriptionField(value: string): string {
+  return `
+    <div class="ui-fieldset">
+      <label class="ui-label" for="description">Description <span class="font-normal text-muted">(optional)</span></label>
+      <div class="rounded-t-lg border border-b-0 border-line bg-subtle p-1.5 flex flex-wrap gap-1" data-md-toolbar>
+        <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" data-md-action="bold" title="Bold"><strong>B</strong></button>
+        <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" data-md-action="italic" title="Italic"><em>I</em></button>
+        <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" data-md-action="link" title="Link">link</button>
+        <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" data-md-action="h2" title="Heading">H2</button>
+        <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" data-md-action="ul" title="Bullet list">• list</button>
+        <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" data-md-action="quote" title="Quote">” quote</button>
+      </div>
+      <textarea class="ui-input resize-y rounded-t-none" id="description" name="description" rows="5" placeholder="Tell guests what this event is about..." data-md-textarea>${escapeHtml(value)}</textarea>
+      <p class="ui-hint">Use the toolbar for formatting. Supports bold, italic, links, headings, lists and quotes.</p>
+    </div>
+  `;
+}
+
 /** "Mon 14 Sep · 09:00" — weekday first, because hosts scan by day. */
 function whenParts(iso: string, timeZone: string): { day: string; clock: string } {
   const p = utcToZonedParts(new Date(iso), timeZone);
@@ -631,13 +720,7 @@ export function eventTypeCreatePage(
             </div>
           </div>
 
-          ${field({
-            name: "description",
-            label: "Description",
-            required: false,
-            value: d.description,
-            attrsHtml: 'rows="3"',
-          })}
+          ${descriptionField(d.description)}
 
           <div class="ui-fieldset">
             <span class="ui-label">Booking style</span>
@@ -929,6 +1012,7 @@ export function eventTypeCreatePage(
           locationType.addEventListener("change", syncLocation);
           syncLocation();
         })();
+      ${MARKDOWN_EDITOR_SCRIPT}
       </script>`,
   });
 }
@@ -1127,12 +1211,7 @@ export function eventTypeEditPage(
               </div>
             </div>
           </div>
-          ${field({
-            name: "description",
-            label: "Description",
-            required: false,
-            value: eventType.description ?? "",
-          })}
+          ${descriptionField(eventType.description ?? "")}
           <div data-location-fields>
             ${field({
               name: "location_type",
@@ -1424,6 +1503,7 @@ export function eventTypeEditPage(
           locationType.addEventListener("change", syncLocation);
           syncLocation();
         })();
+      ${MARKDOWN_EDITOR_SCRIPT}
       </script>`,
   });
 }
