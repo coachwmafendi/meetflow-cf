@@ -12,6 +12,7 @@ import {
   statTile,
   table,
   time,
+  type IconName,
 } from "./ui";
 import type { BookingWithEvent, DashboardStats } from "../db/bookings";
 import type { AvailabilityRuleRow, BookingAttendeeRow, EventTypeRow, PublicUser } from "../types";
@@ -210,23 +211,122 @@ const MARKDOWN_EDITOR_SCRIPT = `
           ta.dispatchEvent(new Event("input", { bubbles: true }));
         }
       });
+
+      document.addEventListener("change", function (event) {
+        var select = event.target.closest("[data-md-block]");
+        if (!select) return;
+        var toolbar = select.closest("[data-md-toolbar]");
+        if (!toolbar) return;
+        var ta = toolbar.parentElement.querySelector("[data-md-textarea]");
+        if (!ta) return;
+        var value = select.value;
+        select.value = "";
+        if (value === "h2") prefixLines(ta, "## ");
+      });
+    })();
+  </script>`;
+
+const LOCATION_SELECT_SCRIPT = `
+  <script>
+    (function () {
+      function setTrigger(selectEl) {
+        var wrapper = selectEl.closest("[data-location-select]");
+        var trigger = wrapper.querySelector("[data-location-trigger]");
+        var selected = wrapper.querySelector("[data-location-selected]");
+        var option = wrapper.querySelector('[data-location-option="' + selectEl.value + '"]');
+        if (trigger && option && selected) {
+          selected.innerHTML = option.innerHTML;
+        }
+        var dropdown = wrapper.querySelector("[data-location-dropdown]");
+        if (dropdown) dropdown.classList.add("hidden");
+        trigger.setAttribute("aria-expanded", "false");
+      }
+
+      document.addEventListener("click", function (event) {
+        var trigger = event.target.closest("[data-location-trigger]");
+        if (trigger) {
+          var wrapper = trigger.closest("[data-location-select]");
+          var dropdown = wrapper.querySelector("[data-location-dropdown]");
+          var expanded = dropdown.classList.toggle("hidden");
+          trigger.setAttribute("aria-expanded", String(!expanded));
+          event.preventDefault();
+          return;
+        }
+
+        var option = event.target.closest("[data-location-option]");
+        if (option) {
+          var wrapper = option.closest("[data-location-select]");
+          var selectEl = wrapper.querySelector("[data-location-type]");
+          selectEl.value = option.getAttribute("data-location-option");
+          selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+          setTrigger(selectEl);
+          return;
+        }
+
+        if (!event.target.closest("[data-location-select]")) {
+          Array.prototype.forEach.call(document.querySelectorAll("[data-location-dropdown]"), function (dd) {
+            dd.classList.add("hidden");
+            var wrapper = dd.closest("[data-location-select]");
+            var trigger = wrapper ? wrapper.querySelector("[data-location-trigger]") : null;
+            if (trigger) trigger.setAttribute("aria-expanded", "false");
+          });
+        }
+      });
     })();
   </script>`;
 
 function descriptionField(value: string): string {
+  const toolbarBtn = (action: string, title: string, inner: string) =>
+    `<button type="button" class="rounded p-1.5 text-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" data-md-action="${action}" title="${title}" aria-label="${title}">${inner}</button>`;
+
   return `
     <div class="ui-fieldset">
       <label class="ui-label" for="description">Description <span class="font-normal text-muted">(optional)</span></label>
-      <div class="rounded-t-lg border border-b-0 border-line bg-subtle p-1.5 flex flex-wrap gap-1" data-md-toolbar>
-        <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" data-md-action="bold" title="Bold"><strong>B</strong></button>
-        <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" data-md-action="italic" title="Italic"><em>I</em></button>
-        <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" data-md-action="link" title="Link">link</button>
-        <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" data-md-action="h2" title="Heading">H2</button>
-        <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" data-md-action="ul" title="Bullet list">• list</button>
-        <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" data-md-action="quote" title="Quote">” quote</button>
+      <div class="overflow-hidden rounded-lg border border-line-strong bg-surface">
+        <div class="flex items-center gap-1 border-b border-line bg-subtle px-2 py-1.5" data-md-toolbar>
+          <select class="bg-transparent text-sm text-ink focus:outline-none" data-md-block aria-label="Text style">
+            <option value="">Normal</option>
+            <option value="h2">Heading</option>
+          </select>
+          <span class="mx-1 h-4 w-px bg-line"></span>
+          ${toolbarBtn("bold", "Bold", icon("bold", "size-4"))}
+          ${toolbarBtn("italic", "Italic", icon("italic", "size-4"))}
+          ${toolbarBtn("link", "Link", icon("link", "size-4"))}
+          ${toolbarBtn("ul", "Bullet list", icon("list", "size-4"))}
+          ${toolbarBtn("quote", "Quote", icon("quote", "size-4"))}
+        </div>
+        <textarea class="block w-full resize-y bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-muted/70 focus:outline-none focus:ring-2 focus:ring-ink/10 min-h-[6rem]" id="description" name="description" rows="5" placeholder="Tell guests what this event is about..." data-md-textarea>${escapeHtml(value)}</textarea>
       </div>
-      <textarea class="ui-input resize-y rounded-t-none" id="description" name="description" rows="5" placeholder="Tell guests what this event is about..." data-md-textarea>${escapeHtml(value)}</textarea>
-      <p class="ui-hint">Use the toolbar for formatting. Supports bold, italic, links, headings, lists and quotes.</p>
+      <p class="ui-hint">Format with Markdown. Supports bold, italic, links, lists and quotes.</p>
+    </div>
+  `;
+}
+
+const LOCATION_OPTIONS = [
+  { value: "none", label: "No location", icon: "locationNone" },
+  { value: "google_meet", label: "Google Meet", icon: "video" },
+  { value: "zoom", label: "Zoom", icon: "video" },
+  { value: "in_person", label: "In person", icon: "mapPin" },
+  { value: "phone", label: "Phone", icon: "phone" },
+] as const;
+
+function locationSelectHtml(selected: string): string {
+  const selectedOption = LOCATION_OPTIONS.find((o) => o.value === selected) ?? LOCATION_OPTIONS[0]!;
+  const optionBtn = (o: (typeof LOCATION_OPTIONS)[number]) =>
+    `<button type="button" class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${o.value === selected ? "bg-subtle text-ink" : "text-body hover:bg-subtle hover:text-ink"}" data-location-option="${o.value}" role="option" aria-selected="${o.value === selected ? "true" : "false"}">${icon(o.icon as IconName, "size-4 text-muted")}<span>${o.label}</span></button>`;
+
+  return `
+    <div class="relative" data-location-select>
+      <button type="button" class="ui-input flex items-center justify-between gap-2 text-left" data-location-trigger aria-haspopup="listbox" aria-expanded="false">
+        <span class="flex items-center gap-2" data-location-selected>${icon(selectedOption.icon as IconName, "size-4 text-muted")}<span>${selectedOption.label}</span></span>
+        ${icon("chevronDown", "size-4 text-muted")}
+      </button>
+      <div class="absolute z-10 mt-1 hidden w-full overflow-hidden rounded-md border border-line-strong bg-surface py-1 shadow-lg" data-location-dropdown role="listbox">
+        ${LOCATION_OPTIONS.map((o) => optionBtn(o)).join("")}
+      </div>
+      <select class="sr-only" id="location_type" name="location_type" data-location-type>
+        ${LOCATION_OPTIONS.map((o) => `<option value="${o.value}"${o.value === selected ? " selected" : ""}>${o.label}</option>`).join("")}
+      </select>
     </div>
   `;
 }
@@ -635,21 +735,6 @@ export function eventTypeCreatePage(
     )
     .join("");
 
-  const locationOptions = ["none", "google_meet", "zoom", "in_person", "phone"]
-    .map(
-      (t) =>
-        `<option value="${t}"${d.locationType === t ? " selected" : ""}>${
-          {
-            none: "No location",
-            google_meet: "Google Meet",
-            zoom: "Zoom",
-            in_person: "In person",
-            phone: "Phone",
-          }[t]
-        }</option>`,
-    )
-    .join("");
-
   const locationValueField =
     d.locationType === "google_meet" || d.locationType === "zoom"
       ? field({
@@ -801,9 +886,7 @@ export function eventTypeCreatePage(
             name: "location_type",
             label: "Location",
             required: false,
-            controlHtml: `<select class="ui-select" id="location_type" name="location_type" data-location-type>
-              ${locationOptions}
-            </select>`,
+            controlHtml: locationSelectHtml(d.locationType),
           })}
 
           <div data-location-value-block${d.locationType === "none" ? " hidden" : ""}>
@@ -1013,6 +1096,7 @@ export function eventTypeCreatePage(
           syncLocation();
         })();
       ${MARKDOWN_EDITOR_SCRIPT}
+      ${LOCATION_SELECT_SCRIPT}
       </script>`,
   });
 }
@@ -1217,22 +1301,7 @@ export function eventTypeEditPage(
               name: "location_type",
               label: "Location",
               required: false,
-              controlHtml: `<select class="ui-select" id="location_type" name="location_type" data-location-type>
-                ${["none", "google_meet", "zoom", "in_person", "phone"]
-                  .map(
-                    (t) =>
-                      `<option value="${t}"${eventType.location_type === t ? " selected" : ""}>${
-                        {
-                          none: "No location",
-                          google_meet: "Google Meet",
-                          zoom: "Zoom",
-                          in_person: "In person",
-                          phone: "Phone",
-                        }[t]
-                      }</option>`,
-                  )
-                  .join("")}
-              </select>`,
+              controlHtml: locationSelectHtml(eventType.location_type),
             })}
             <div data-saved-location-block
                  class="${eventType.location_type === "google_meet" || eventType.location_type === "zoom" ? "" : "hidden"}">
@@ -1504,6 +1573,7 @@ export function eventTypeEditPage(
           syncLocation();
         })();
       ${MARKDOWN_EDITOR_SCRIPT}
+      ${LOCATION_SELECT_SCRIPT}
       </script>`,
   });
 }
