@@ -579,6 +579,7 @@ dashboard.post("/event-types/:id", async (c) => {
   const form = await c.req.parseBody();
   const name = String(form.name ?? "").trim();
   const slug = String(form.slug ?? "").toLowerCase();
+  const currentEventDates = await listEventDates(c.env.DB, id);
   const duration = Number(form.duration_minutes);
   const bufferMinutes = Number(form.buffer_minutes);
   const seatsTotal =
@@ -592,9 +593,13 @@ dashboard.post("/event-types/:id", async (c) => {
     ? String(form.location_type)
     : "none";
   const savedChoice = String(form.saved_location_value ?? "");
+  const useSavedLink =
+    (locationType === "google_meet" || locationType === "zoom") &&
+    savedChoice &&
+    savedChoice !== "__custom__";
   const locationValue = normalizeLocationValue(
     locationType,
-    savedChoice && savedChoice !== "__custom__" ? savedChoice : String(form.location_value ?? ""),
+    useSavedLink ? savedChoice : String(form.location_value ?? ""),
   );
   const bookings = await countBookingsForEventType(c.env.DB, id);
 
@@ -711,12 +716,24 @@ dashboard.post("/event-types/:id", async (c) => {
       isActive: current.is_active,
       now: nowIso(),
     });
-    await replaceEventDates(
-      c.env.DB,
-      id,
-      dateRows.map((r) => ({ date: r.date, startTime: r.start, endTime: r.end })),
-      nowIso(),
-    );
+
+    const currentDatesComparable = currentEventDates
+      .map((d) => `${d.date}|${d.start_time}|${d.end_time}`)
+      .sort();
+    const newDatesComparable = dateRows.map((r) => `${r.date}|${r.start}|${r.end}`).sort();
+    const datesChanged =
+      current.dates_only !== datesOnly ||
+      currentDatesComparable.length !== newDatesComparable.length ||
+      !currentDatesComparable.every((v, i) => v === newDatesComparable[i]);
+
+    if (datesChanged) {
+      await replaceEventDates(
+        c.env.DB,
+        id,
+        dateRows.map((r) => ({ date: r.date, startTime: r.start, endTime: r.end })),
+        nowIso(),
+      );
+    }
   } catch (err) {
     if (!String(err).includes("UNIQUE")) throw err;
     return html(

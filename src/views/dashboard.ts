@@ -1133,59 +1133,68 @@ export function eventTypeEditPage(
             required: false,
             value: eventType.description ?? "",
           })}
-          ${field({
-            name: "location_type",
-            label: "Location",
-            required: false,
-            controlHtml: `<select class="ui-select" id="location_type" name="location_type">
-              ${["none", "google_meet", "zoom", "in_person", "phone"]
-                .map(
-                  (t) =>
-                    `<option value="${t}"${eventType.location_type === t ? " selected" : ""}>${
-                      {
-                        none: "No location",
-                        google_meet: "Google Meet",
-                        zoom: "Zoom",
-                        in_person: "In person",
-                        phone: "Phone",
-                      }[t]
-                    }</option>`,
-                )
-                .join("")}
-            </select>`,
-          })}
-          ${
-            eventType.location_type === "google_meet" || eventType.location_type === "zoom"
-              ? field({
-                  name: "saved_location_value",
-                  label: "Meeting link",
-                  required: false,
-                  controlHtml: `<select class="ui-select" id="saved_location_value" name="saved_location_value">
-                    <option value="__custom__">Use a new link…</option>
-                    ${savedLocations
-                      .map(
-                        (l) =>
-                          `<option value="${escapeHtml(l)}"${
-                            l === eventType.location_value ? " selected" : ""
-                          }>${escapeHtml(l)}</option>`,
-                      )
-                      .join("")}
-                    ${
-                      eventType.location_value && !savedLocations.includes(eventType.location_value)
-                        ? `<option value="${escapeHtml(eventType.location_value)}" selected>${escapeHtml(eventType.location_value)}</option>`
-                        : ""
-                    }
-                  </select>`,
-                })
-              : ""
-          }
-          ${field({
-            name: "location_value",
-            label: "Location details",
-            required: false,
-            value: eventType.location_value ?? "",
-            hint: "Meeting link, address or phone number — guests will see it on the booking page.",
-          })}
+          <div data-location-fields>
+            ${field({
+              name: "location_type",
+              label: "Location",
+              required: false,
+              controlHtml: `<select class="ui-select" id="location_type" name="location_type" data-location-type>
+                ${["none", "google_meet", "zoom", "in_person", "phone"]
+                  .map(
+                    (t) =>
+                      `<option value="${t}"${eventType.location_type === t ? " selected" : ""}>${
+                        {
+                          none: "No location",
+                          google_meet: "Google Meet",
+                          zoom: "Zoom",
+                          in_person: "In person",
+                          phone: "Phone",
+                        }[t]
+                      }</option>`,
+                  )
+                  .join("")}
+              </select>`,
+            })}
+            <div data-saved-location-block
+                 class="${eventType.location_type === "google_meet" || eventType.location_type === "zoom" ? "" : "hidden"}">
+              ${field({
+                name: "saved_location_value",
+                label: "Meeting link",
+                required: false,
+                controlHtml: `<select class="ui-select" id="saved_location_value" name="saved_location_value" data-saved-location-select>
+                  <option value="__custom__">Use a new link…</option>
+                  ${savedLocations
+                    .map(
+                      (l) =>
+                        `<option value="${escapeHtml(l)}"${
+                          l === eventType.location_value ? " selected" : ""
+                        }>${escapeHtml(l)}</option>`,
+                    )
+                    .join("")}
+                  ${
+                    eventType.location_value && !savedLocations.includes(eventType.location_value)
+                      ? `<option value="${escapeHtml(eventType.location_value)}" selected>${escapeHtml(eventType.location_value)}</option>`
+                      : ""
+                  }
+                </select>`,
+              })}
+            </div>
+            <div data-location-value-block
+                 class="${eventType.location_type === "none" ? "hidden" : ""}">
+              ${field({
+                name: "location_value",
+                label:
+                  eventType.location_type === "in_person"
+                    ? "Address"
+                    : eventType.location_type === "phone"
+                      ? "Phone number"
+                      : "Location details",
+                required: false,
+                value: eventType.location_value ?? "",
+                hint: "Guests will see this on the booking page.",
+              })}
+            </div>
+          </div>
           <div class="flex justify-end border-t border-line pt-4">
             ${button({ label: "Save changes", variant: "primary", icon: "check" })}
           </div>
@@ -1347,6 +1356,73 @@ export function eventTypeEditPage(
               currentImage.classList.toggle("hidden", removeCheckbox.checked);
             });
           }
+        })();
+
+        (function () {
+          var locationType = document.getElementById("location_type");
+          var savedBlock = document.querySelector("[data-saved-location-block]");
+          var savedSelect = document.querySelector("[data-saved-location-select]");
+          var valueBlock = document.querySelector("[data-location-value-block]");
+          var valueLabel = valueBlock ? valueBlock.querySelector(".ui-label") : null;
+          var valueInput = valueBlock ? valueBlock.querySelector("input") : null;
+          if (!locationType || !savedBlock || !valueBlock) return;
+
+          var labels = {
+            google_meet: "Location details",
+            zoom: "Location details",
+            in_person: "Address",
+            phone: "Phone number",
+          };
+          var placeholders = {
+            google_meet: "https://meet.google.com/…",
+            zoom: "https://zoom.us/j/…",
+            in_person: "Office address",
+            phone: "+60 …",
+          };
+
+          function populateSaved(type) {
+            if (!savedSelect) return;
+            var currentValue = savedSelect.value;
+            savedSelect.innerHTML = '<option value="__custom__">Use a new link…</option>';
+            fetch('/api/event-types/locations?type=' + encodeURIComponent(type))
+              .then(function (res) { return res.ok ? res.json() : { locations: [] }; })
+              .then(function (body) {
+                var locations = body.locations || [];
+                locations.forEach(function (link) {
+                  var option = document.createElement("option");
+                  option.value = link;
+                  option.textContent = link;
+                  savedSelect.appendChild(option);
+                });
+                if (currentValue && currentValue !== "__custom__") {
+                  var exists = Array.prototype.some.call(savedSelect.options, function (o) {
+                    return o.value === currentValue;
+                  });
+                  if (!exists) {
+                    var fallback = document.createElement("option");
+                    fallback.value = currentValue;
+                    fallback.textContent = currentValue;
+                    savedSelect.appendChild(fallback);
+                  }
+                  savedSelect.value = currentValue;
+                }
+              })
+              .catch(function () {});
+          }
+
+          function syncLocation() {
+            var type = locationType.value;
+            savedBlock.classList.toggle("hidden", type !== "google_meet" && type !== "zoom");
+            valueBlock.classList.toggle("hidden", type === "none");
+            if (valueLabel) valueLabel.textContent = labels[type] || "Location details";
+            if (valueInput) valueInput.placeholder = placeholders[type] || "";
+            if (type === "google_meet" || type === "zoom") {
+              populateSaved(type);
+            }
+          }
+
+          locationType.addEventListener("change", syncLocation);
+          syncLocation();
         })();
       </script>`,
   });
