@@ -277,7 +277,7 @@ const LOCATION_SELECT_SCRIPT = `
 
 function descriptionField(value: string): string {
   const toolbarBtn = (action: string, title: string, inner: string) =>
-    `<button type="button" class="rounded p-1.5 text-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" data-md-action="${action}" title="${title}" aria-label="${title}">${inner}</button>`;
+    `<button type="button" class="rounded p-1.5 text-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" data-md-action="${action}" data-tooltip="${title}" aria-label="${title}">${inner}</button>`;
 
   return `
     <div class="ui-fieldset">
@@ -532,7 +532,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
             size: "sm",
           })}
           <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2" aria-label="More actions"
-                  title="More actions"
+                  data-tooltip="More actions"
                   :aria-expanded="open ? 'true' : 'false'" @click="open = !open">
             ${icon("menu", "size-4")}
           </button>
@@ -585,7 +585,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
             <textarea class="ui-input mt-3 resize-none font-mono text-[0.75rem]" rows="8"
                       readonly data-embed-code data-embed-code-tab="popup" hidden></textarea>
             <div class="mt-3 flex justify-end">
-              <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-embed-copy>
+              <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-embed-copy data-tooltip="Copy to clipboard" data-tooltip-pos="bottom">
                 ${icon("copy", "size-4")}<span>Copy code</span>
               </button>
             </div>
@@ -726,7 +726,7 @@ export function eventTypeCreatePage(
         r.end,
       )}" aria-label="End time ${i + 1}">
       <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
-              data-remove-date aria-label="Remove date">
+              data-remove-date data-tooltip="Remove date" aria-label="Remove date">
         ${icon("x", "size-4")}
       </button>
     </div>`,
@@ -846,7 +846,7 @@ export function eventTypeCreatePage(
                       <span class="text-[0.75rem] text-muted shrink-0">to</span>
                       <input class="ui-input font-mono" type="time" name="ed_end_0" aria-label="End time 1">
                       <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
-                              data-remove-date aria-label="Remove date">
+                              data-remove-date data-tooltip="Remove date" aria-label="Remove date">
                         ${icon("x", "size-4")}
                       </button>
                     </div>
@@ -1285,7 +1285,7 @@ export function eventTypeEditPage(
                       <input class="ui-input font-mono" type="time" name="ed_end_${i}"
                              value="${escapeHtml(r.end)}" aria-label="End time ${i + 1}">
                       <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
-                              data-remove-date aria-label="Remove date">
+                              data-remove-date data-tooltip="Remove date" aria-label="Remove date">
                         ${icon("x", "size-4")}
                       </button>
                     </div>`,
@@ -1297,7 +1297,7 @@ export function eventTypeEditPage(
                       <span class="text-[0.75rem] text-muted shrink-0">to</span>
                       <input class="ui-input font-mono" type="time" name="ed_end_0" aria-label="End time 1">
                       <button type="button" class="ui-btn ui-btn-ghost ui-btn-sm px-2 shrink-0"
-                              data-remove-date aria-label="Remove date">
+                              data-remove-date data-tooltip="Remove date" aria-label="Remove date">
                         ${icon("x", "size-4")}
                       </button>
                     </div>`
@@ -1851,7 +1851,7 @@ export function eventTicketsPage(
           <input readonly data-copy-value class="ui-input font-mono text-[0.75rem]" value="${escapeHtml(
             data.publicUrl,
           )}">
-          <button type="button" data-copy-link class="ui-btn ui-btn-secondary ui-btn-sm shrink-0">
+          <button type="button" data-copy-link class="ui-btn ui-btn-secondary ui-btn-sm shrink-0" data-tooltip="Copy public link" data-tooltip-pos="bottom">
             ${icon("copy", "size-4")}<span>Copy</span>
           </button>
         </div>
