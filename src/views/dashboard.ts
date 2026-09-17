@@ -585,7 +585,7 @@ export function eventTypesPage(user: PublicUser, eventTypes: EventTypeRow[], toa
             <textarea class="ui-input mt-3 resize-none font-mono text-[0.75rem]" rows="8"
                       readonly data-embed-code data-embed-code-tab="popup" hidden></textarea>
             <div class="mt-3 flex justify-end">
-              <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-embed-copy data-tooltip="Copy to clipboard" data-tooltip-pos="bottom">
+              <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-embed-copy data-tooltip="Copy to clipboard" data-tooltip-pos="top">
                 ${icon("copy", "size-4")}<span>Copy code</span>
               </button>
             </div>
@@ -1851,7 +1851,7 @@ export function eventTicketsPage(
           <input readonly data-copy-value class="ui-input font-mono text-[0.75rem]" value="${escapeHtml(
             data.publicUrl,
           )}">
-          <button type="button" data-copy-link class="ui-btn ui-btn-secondary ui-btn-sm shrink-0" data-tooltip="Copy public link" data-tooltip-pos="bottom">
+          <button type="button" data-copy-link class="ui-btn ui-btn-secondary ui-btn-sm shrink-0" data-tooltip="Copy public link" data-tooltip-pos="top">
             ${icon("copy", "size-4")}<span>Copy</span>
           </button>
         </div>
