@@ -3,7 +3,7 @@ import { utcToZonedParts } from "../lib/timezone";
 import { zoneDisplay } from "../lib/timezoneList";
 import { markdownToHtml } from "../lib/markdown";
 import { avatar, badge, button, emptyState, icon } from "./ui";
-import { TIMEZONE_SCRIPT } from "./timezoneSelect";
+import { TIMEZONE_SCRIPT, timezoneSelect } from "./timezoneSelect";
 import type { BookingAttendeeRow, BookingRow, EventTypeRow, PublicUser } from "../types";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -219,9 +219,7 @@ export function bookingPage(
               }
 
               <div class="mt-3.5">
-                <label class="ui-label" for="guest-timezone">Timezone</label>
-                <select class="ui-select" id="guest-timezone" x-model="guestTimezone"
-                        data-timezone data-timezone-autodetect></select>
+                ${timezoneSelect({ name: "guest-timezone", selected: host.timezone, autodetect: true })}
               </div>
 
               <template x-if="selected">
